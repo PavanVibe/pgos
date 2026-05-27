@@ -1,0 +1,307 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum SubscriptionTier {
+  STARTER
+  GROWTH
+  SCALE
+}
+
+enum TenantStatus {
+  ACTIVE
+  NOTICE
+  PAST
+  INCOMPLETE
+}
+
+enum InvoiceStatus {
+  PENDING
+  PAST_DUE
+  PAID
+}
+
+enum ComplaintPriority {
+  LOW
+  HIGH
+  URGENT
+}
+
+enum ComplaintStatus {
+  PENDING
+  ESCALATED
+  RESOLVED
+}
+
+enum StaffRole {
+  MANAGER
+  CLEANER
+  MAINTENANCE
+}
+
+model Organization {
+  id               String           @id @default(uuid())
+  name             String
+  clerkOrgId       String           @unique
+  subscriptionTier SubscriptionTier @default(STARTER)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  
+  isActive         Boolean          @default(true)
+  deletedAt        DateTime?
+
+  pgs              PG[]
+  staff            Staff[]
+}
+
+model PG {
+  id             String            @id @default(uuid())
+  organizationId String
+  name           String
+  city           String
+  address        String?
+  
+  createdBy      String?
+  updatedBy      String?
+  isActive       Boolean           @default(true)
+  deletedAt      DateTime?
+
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  
+  organization   Organization      @relation(fields: [organizationId], references: [id])
+  rooms          Room[]
+  expenses       Expense[]
+  complaints     Complaint[]
+  tenantProfiles PGTenantProfile[]
+
+  @@index([organizationId])
+  @@index([isActive])
+}
+
+model Room {
+  id        String   @id @default(uuid())
+  pgId      String
+  floor     String?
+  number    String
+  capacity  Int
+  
+  createdBy String?
+  updatedBy String?
+  isActive  Boolean  @default(true)
+  deletedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  pg             PG                @relation(fields: [pgId], references: [id])
+  beds           Bed[]
+  tenantProfiles PGTenantProfile[]
+
+  @@index([pgId])
+  @@index([isActive])
+}
+
+model Bed {
+  id            String           @id @default(uuid())
+  roomId        String
+  bedNumber     String
+  monthlyRent   Float
+  
+  createdBy     String?
+  updatedBy     String?
+  isActive      Boolean          @default(true)
+  deletedAt     DateTime?
+
+  tenantProfile PGTenantProfile?
+  room          Room             @relation(fields: [roomId], references: [id])
+
+  @@index([roomId])
+  @@index([isActive])
+}
+
+model GlobalTenant {
+  id                   String            @id @default(uuid())
+  phone                String            @unique
+  name                 String?
+  email                String?           @unique
+  maskedAadhaar        String?
+  encryptedAadhaarHash String?
+  kycDocUrl            String?
+  trustScore           Int               @default(100)
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+  
+  isActive             Boolean           @default(true)
+  deletedAt            DateTime?
+
+  profiles             PGTenantProfile[]
+}
+
+model PGTenantProfile {
+  id              String         @id @default(uuid())
+  globalTenantId  String
+  pgId            String
+  bedId                String?        @unique
+  roomId               String
+  historicalRoomNumber String?
+  historicalBedNumber  String?
+  status               TenantStatus   @default(ACTIVE)
+  securityDeposit      Float          @default(0)
+  moveInDate           DateTime       @default(now())
+  moveOutDate          DateTime?
+  
+  createdBy            String?
+  updatedBy            String?
+  isActive             Boolean        @default(true)
+  deletedAt            DateTime?
+
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+  
+  globalTenant         GlobalTenant   @relation(fields: [globalTenantId], references: [id])
+  pg                   PG             @relation(fields: [pgId], references: [id])
+  bed                  Bed?           @relation(fields: [bedId], references: [id])
+  room                 Room           @relation(fields: [roomId], references: [id])
+  invoices             RentInvoice[]
+  complaints           Complaint[]
+
+  @@index([globalTenantId])
+  @@index([pgId])
+  @@index([roomId])
+  @@index([isActive])
+  @@index([bedId, status])
+}
+
+model RentInvoice {
+  id            String          @id @default(uuid())
+  pgTenantId    String
+  amount        Float
+  dueDate       DateTime
+  status        InvoiceStatus   @default(PENDING)
+  razorpayOrdId String?
+  razorpayPayId String?
+  paidAt        DateTime?
+  
+  createdBy     String?
+  updatedBy     String?
+  isActive      Boolean         @default(true)
+  deletedAt     DateTime?
+
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  tenantProfile PGTenantProfile @relation(fields: [pgTenantId], references: [id])
+
+  @@index([pgTenantId])
+  @@index([dueDate])
+}
+
+model Expense {
+  id         String   @id @default(uuid())
+  pgId       String
+  category   String
+  amount     Float
+  incurredAt DateTime @default(now())
+  receiptUrl String?
+  
+  createdBy  String?
+  updatedBy  String?
+  isActive   Boolean  @default(true)
+  deletedAt  DateTime?
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  pg         PG       @relation(fields: [pgId], references: [id])
+
+  @@index([pgId])
+}
+
+model Complaint {
+  id                 String            @id @default(uuid())
+  pgId               String
+  pgTenantId         String
+  category           String
+  description        String
+  imageUrl           String?
+  priority           ComplaintPriority @default(LOW)
+  status             ComplaintStatus   @default(PENDING)
+  slaDeadline        DateTime
+  assignedResolverId String?
+  
+  createdBy          String?
+  updatedBy          String?
+  isActive           Boolean           @default(true)
+  deletedAt          DateTime?
+
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  pg                 PG                @relation(fields: [pgId], references: [id])
+  tenantProfile      PGTenantProfile   @relation(fields: [pgTenantId], references: [id])
+
+  @@index([pgId])
+  @@index([pgTenantId])
+  @@index([status, slaDeadline])
+}
+
+model Staff {
+  id             String       @id @default(uuid())
+  organizationId String
+  clerkUserId    String?      @unique
+  name           String
+  phone          String
+  role           StaffRole    @default(MANAGER)
+  
+  createdBy      String?
+  updatedBy      String?
+  isActive       Boolean      @default(true)
+  deletedAt      DateTime?
+
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
+}
+
+model EventLog {
+  id        String   @id @default(uuid())
+  entityId  String
+  eventType String
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([entityId])
+  @@index([eventType])
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  actorId     String
+  action      String
+  entityType  String
+  entityId    String
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  @@index([entityId])
+  @@index([entityType])
+}
+
+model OnboardingAnalytics {
+  id              String   @id @default(uuid())
+  organizationId  String
+  pgId            String
+  actorId         String
+  status          String   // SUCCESS, ABANDONED, FAILED
+  isQuickAdd      Boolean  @default(false)
+  durationSeconds Int?
+  conflictCount   Int      @default(0)
+  createdAt       DateTime @default(now())
+
+  @@index([organizationId])
+  @@index([pgId])
+}

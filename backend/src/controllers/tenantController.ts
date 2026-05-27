@@ -1,0 +1,109 @@
+import { Request, Response } from 'express';
+import { searchTenantByPhone } from '../services/tenantService';
+import { OnboardResidentWorkflow } from '../services/workflows/OnboardResidentWorkflow';
+import { VacateResidentWorkflow } from '../services/workflows/VacateResidentWorkflow';
+import { lockBed } from '../services/lockService';
+import { z } from 'zod';
+import prisma from '../utils/prisma';
+import { TenantStatus } from '@prisma/client';
+
+export const searchByPhone = async (req: Request, res: Response) => {
+  try {
+    const { phone } = req.query;
+    if (!phone || typeof phone !== 'string') {
+      return res.status(400).json({ error: 'Phone number is required.' });
+    }
+
+    const tenant = await searchTenantByPhone(phone);
+    if (!tenant) {
+      return res.status(404).json({ status: 'not_found' });
+    }
+
+    res.status(200).json({ status: 'success', data: tenant });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+const onboardSchema = z.object({
+  bedId: z.string(),
+  phone: z.string().min(10),
+  name: z.string().min(2),
+  email: z.string().email().optional().or(z.literal('')),
+  moveInDate: z.string(),
+  monthlyRent: z.number().positive(),
+  securityDeposit: z.number().nonnegative(),
+  isQuickAdd: z.boolean().default(false)
+});
+
+export const onboard = async (req: Request, res: Response) => {
+  try {
+    const { pgId } = req.params;
+    const actorId = (req as any).auth?.userId || 'system';
+    const payload = onboardSchema.parse(req.body);
+
+    // Pre-flight database check to see if the bed is already occupied by an active, notice, or incomplete profile
+    const activeProfile = await prisma.pGTenantProfile.findFirst({
+      where: {
+        bedId: payload.bedId,
+        status: {
+          in: [TenantStatus.ACTIVE, TenantStatus.INCOMPLETE, TenantStatus.NOTICE]
+        }
+      }
+    });
+
+    if (activeProfile) {
+      return res.status(409).json({ error: 'Bed already occupied. Refresh occupancy map.' });
+    }
+
+    const profile = await OnboardResidentWorkflow.execute(
+      pgId as string,
+      payload.bedId,
+      payload.phone,
+      payload.name,
+      payload.email || undefined,
+      new Date(payload.moveInDate),
+      payload.monthlyRent,
+      payload.securityDeposit,
+      actorId,
+      payload.isQuickAdd
+    );
+
+    res.status(200).json({ status: 'success', data: profile });
+  } catch (error: any) {
+    if (error.message && error.message.includes('already occupied')) {
+      return res.status(409).json({ error: error.message });
+    }
+    res.status(400).json({ error: error.message });
+  }
+};
+
+export const lockBedForOnboarding = async (req: Request, res: Response) => {
+  try {
+    const { bedId } = req.params;
+    const actorId = (req as any).auth?.userId || 'system';
+    
+    const success = await lockBed(bedId as string, actorId);
+    if (!success) {
+      return res.status(409).json({ error: 'Bed is currently locked by another operation.' });
+    }
+
+    res.status(200).json({ status: 'success', message: 'Bed locked for 5 minutes.' });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const vacate = async (req: Request, res: Response) => {
+  try {
+    const { pgId, tenantId } = req.params;
+    const actorId = (req as any).auth?.userId || 'system';
+
+    const profile = await VacateResidentWorkflow.execute(pgId as string, tenantId as string, actorId);
+
+    res.status(200).json({ status: 'success', data: profile });
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
