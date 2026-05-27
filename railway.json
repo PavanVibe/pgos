@@ -4,10 +4,11 @@
         "watchPatterns": [
             "backend/**"
         ],
-        "rootDirectory": "backend"
+        "rootDirectory": "backend",
+        "buildCommand": "npx prisma generate && npm run build"
     },
     "deploy": {
-        "startCommand": "npm start",
+        "startCommand": "npx prisma migrate deploy && npm run start",
         "restartPolicyType": "ON_FAILURE"
     }
 }
