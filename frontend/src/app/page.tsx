@@ -2,7 +2,6 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { useEffect } from 'react';
-import { useAuth } from '@clerk/nextjs';
 import { useOrganizationStore } from '@/store/useOrganizationStore';
 import { fetchApi } from '@/lib/api';
 import ActivityFeed from "@/components/dashboard/ActivityFeed";
@@ -20,7 +19,6 @@ import ComplaintDrawer from "@/components/complaints/ComplaintDrawer";
 import { Building2, ChevronDown } from 'lucide-react';
 
 export default function DashboardPage() {
-  const { getToken, orgId } = useAuth();
   const {
     activePgId,
     availablePgs,
@@ -29,9 +27,8 @@ export default function DashboardPage() {
   } = useOrganizationStore();
 
   const { data: pgsResponse, isLoading: pgsLoading } = useQuery({
-    queryKey: ['available-pgs', orgId],
-    queryFn: () => fetchApi('/pgs', {}, getToken, orgId),
-    enabled: !!orgId,
+    queryKey: ['available-pgs'],
+    queryFn: () => fetchApi('/pgs'),
   });
 
   useEffect(() => {
@@ -47,8 +44,6 @@ export default function DashboardPage() {
     }
   }, [pgsResponse, activePgId, setActivePgId, setAvailablePgs]);
 
-  const activePg = availablePgs.find(p => p.id === activePgId) || availablePgs[0];
-
   return (
     <div className="min-h-screen bg-black text-white p-6 space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-zinc-800 pb-5">
@@ -56,7 +51,6 @@ export default function DashboardPage() {
           <h1 className="text-4xl font-extrabold tracking-tight">PGOS Dashboard</h1>
           <p className="text-zinc-400 mt-1">Your operational command center.</p>
         </div>
-
         <div className="relative inline-block text-left">
           {pgsLoading ? (
             <div className="h-10 w-48 bg-zinc-800 animate-pulse rounded-lg" />
