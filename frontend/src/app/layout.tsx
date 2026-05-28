@@ -1,33 +1,43 @@
-import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
-import './globals.css';
-import { ClerkProvider } from '@clerk/nextjs';
-import { Toaster } from '@/components/ui/sonner';
+import { useAuth } from '@clerk/nextjs';
 
-const inter = Inter({ subsets: ['latin'] });
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://pgos-production-d612.up.railway.app/api';
 
-export const metadata: Metadata = {
-  title: 'PGOS - The Operating System for PGs',
-  description: 'Automate your PG operations, rent tracking, and complaints.',
-};
+export async function fetchApi(endpoint: string, options: RequestInit = {}, getToken?: () => Promise<string | null>, orgId?: string | null) {
+  let token: string | null = null;
 
-import { QueryProvider } from '@/providers/QueryProvider';
+  if (getToken) {
+    token = await getToken();
+  } else if (typeof window !== 'undefined') {
+    // @ts-ignore
+    if (window.Clerk?.session) {
+      // @ts-ignore
+      token = await window.Clerk.session.getToken();
+    }
+  }
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
-  return (
-    <ClerkProvider>
-      <QueryProvider>
-        <html lang="en">
-          <body className={inter.className}>
-            {children}
-            <Toaster />
-          </body>
-        </html>
-      </QueryProvider>
-    </ClerkProvider>
-  );
+  const headers = new Headers(options.headers || {});
+
+  if (!(options.body instanceof FormData)) {
+    headers.set('Content-Type', 'application/json');
+  }
+
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+
+  if (orgId) {
+    headers.set('x-org-id', orgId);
+  }
+
+  const response = await fetch(`${API_URL}${endpoint}`, {
+    ...options,
+    headers,
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.error || errorData.message || `API Error: ${response.status}`);
+  }
+
+  return response.json();
 }

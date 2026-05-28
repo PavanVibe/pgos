@@ -2,6 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { useEffect } from 'react';
+import { useAuth } from '@clerk/nextjs';
 import { useOrganizationStore } from '@/store/useOrganizationStore';
 import { fetchApi } from '@/lib/api';
 import ActivityFeed from "@/components/dashboard/ActivityFeed";
@@ -19,17 +20,18 @@ import ComplaintDrawer from "@/components/complaints/ComplaintDrawer";
 import { Building2, ChevronDown } from 'lucide-react';
 
 export default function DashboardPage() {
-  const { 
-    activePgId, 
-    availablePgs, 
-    setActivePgId, 
-    setAvailablePgs 
+  const { getToken, orgId } = useAuth();
+  const {
+    activePgId,
+    availablePgs,
+    setActivePgId,
+    setAvailablePgs
   } = useOrganizationStore();
 
-  // Query to fetch all PGs for this organization
   const { data: pgsResponse, isLoading: pgsLoading } = useQuery({
-    queryKey: ['available-pgs'],
-    queryFn: () => fetchApi('/pgs'),
+    queryKey: ['available-pgs', orgId],
+    queryFn: () => fetchApi('/pgs', {}, getToken, orgId),
+    enabled: !!orgId,
   });
 
   useEffect(() => {
@@ -39,8 +41,6 @@ export default function DashboardPage() {
         name: pg.name,
       }));
       setAvailablePgs(pgs);
-
-      // Default active PG if none exists or the current one is invalid
       if (pgs.length > 0 && (!activePgId || !pgs.find((p: any) => p.id === activePgId))) {
         setActivePgId(pgs[0].id);
       }
@@ -51,14 +51,12 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-black text-white p-6 space-y-6">
-      {/* Header with PG Switcher */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-zinc-800 pb-5">
         <div>
           <h1 className="text-4xl font-extrabold tracking-tight">PGOS Dashboard</h1>
           <p className="text-zinc-400 mt-1">Your operational command center.</p>
         </div>
 
-        {/* PG Selector Dropdown */}
         <div className="relative inline-block text-left">
           {pgsLoading ? (
             <div className="h-10 w-48 bg-zinc-800 animate-pulse rounded-lg" />
@@ -89,25 +87,17 @@ export default function DashboardPage() {
 
       {activePgId ? (
         <>
-          {/* Quick Actions */}
           <QuickActions pgId={activePgId} />
-
-          {/* Main Grid */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Tasks */}
             <div className="lg:col-span-2">
               <TodaysTasksPanel pgId={activePgId} />
             </div>
-
-            {/* Right Column: Occupancy & Activity */}
             <div className="space-y-6">
               <PendingCollectionsCard pgId={activePgId} />
               <OccupancySummaryCard pgId={activePgId} />
               <ActivityFeed pgId={activePgId} />
             </div>
           </div>
-
-          {/* Workflow Sheets */}
           <OnboardingSheet />
           <MarkPaidSheet />
           <OverdueResidentSheet pgId={activePgId} />
