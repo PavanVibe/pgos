@@ -24,7 +24,7 @@
     "bullmq": "^5.76.10",
     "cloudinary": "^2.10.0",
     "cors": "^2.8.6",
-    "dotenv": "^16.4.5",
+    "dotenv": "^16.6.1",
     "express": "^5.2.1",
     "helmet": "^8.1.0",
     "ioredis": "^5.10.1",
