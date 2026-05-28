@@ -3,6 +3,6 @@
         "buildCommand": "npm run build"
     },
     "deploy": {
-        "startCommand": "npm run build && npx prisma migrate deploy && node dist/src/index.js"
+        "startCommand": "npm run build && npx prisma migrate deploy && node dist/index.js"
     }
 }
