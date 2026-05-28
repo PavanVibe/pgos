@@ -15,6 +15,7 @@ app.use(cors({
   origin: process.env.CORS_ORIGIN || '*',
   credentials: false,
 }));
+console.log('CORS set to allow all origins');
 app.use(morgan('dev'));
 app.use(express.json());
 
