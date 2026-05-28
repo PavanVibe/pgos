@@ -12,12 +12,8 @@ const PORT = process.env.PORT || 5000;
 // Middlewares
 app.use(helmet());
 app.use(cors({
-  origin: [
-    'http://localhost:3000',
-    'https://pgos-git-main-pavan-pgos-projects20.vercel.app',
-    'https://pgos-two.vercel.app',
-  ],
-  credentials: true,
+  origin: '*',
+  credentials: false,
 }));
 app.use(morgan('dev'));
 app.use(express.json());
