@@ -97,18 +97,8 @@ export default function TodaysTasksPanel({ pgId }: { pgId: string }) {
       case 'invoice':
         return () => openMarkPaid();
       case 'complaint':
-        return async () => {
-          try {
-            const complaintsResponse = await fetchApi(`/pgs/${pgId}/complaints`);
-            const pending = complaintsResponse?.data?.filter((c: any) => c.status === 'PENDING' || c.status === 'ESCALATED') || [];
-            if (pending.length > 0 && pending[0]) {
-              openViewComplaint(pending[0].id);
-            } else {
-              toast.error('No pending complaints found.');
-            }
-          } catch (error: any) {
-            toast.error('Failed to locate pending complaints.');
-          }
+        return () => {
+          openViewComplaint('');
         };
       default:
         return () => console.log('Action triggered:', task.type);

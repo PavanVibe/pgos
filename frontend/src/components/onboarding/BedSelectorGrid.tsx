@@ -59,11 +59,12 @@ export function BedSelectorGrid() {
     mutationFn: (targetBedId: string) => 
       fetchApi(`/tenants/beds/${targetBedId}/lock`, { method: 'POST' }),
     onSuccess: (data, targetBedId) => {
-      setBedSelection(targetBedId);
+      const targetRoom = rooms.find(r => r.beds.some(b => b.id === targetBedId));
+      const targetBed = targetRoom?.beds.find(b => b.id === targetBedId);
+
+      setBedSelection(targetBedId, targetRoom?.number, targetBed?.bedNumber);
       
       // Auto-fill Bed Monthly Rent if found
-      const flatBeds = rooms.flatMap(r => r.beds);
-      const targetBed = flatBeds.find(b => b.id === targetBedId);
       if (targetBed) {
         setRentConfig({
           monthlyRent: targetBed.monthlyRent,

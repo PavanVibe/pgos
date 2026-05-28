@@ -9,8 +9,8 @@ import { toast } from 'sonner';
 
 export function ReviewConfirmation() {
   const { 
-    pgId, bedId, residentDetails, rentConfig, isQuickAdd, 
-    setStep, closeOnboarding, reset 
+    pgId, bedId, roomNumber, bedLabel, residentDetails, rentConfig, isQuickAdd, 
+    aadhaarFront, aadhaarBack, setStep, closeOnboarding, reset 
   } = useOnboardingStore();
   
   const queryClient = useQueryClient();
@@ -95,6 +95,10 @@ export function ReviewConfirmation() {
       return;
     }
 
+    const kycDocUrl = !isQuickAdd && aadhaarFront && aadhaarBack
+      ? `${aadhaarFront.name},${aadhaarBack.name}`
+      : undefined;
+
     const payload = {
       bedId,
       phone: residentDetails.phone,
@@ -103,7 +107,8 @@ export function ReviewConfirmation() {
       moveInDate: residentDetails.moveInDate.toISOString(),
       monthlyRent: rentConfig?.monthlyRent || 0,
       securityDeposit: rentConfig?.securityDeposit || 0,
-      isQuickAdd
+      isQuickAdd,
+      kycDocUrl
     };
 
     onboardingMutation.mutate(payload);
@@ -113,46 +118,52 @@ export function ReviewConfirmation() {
 
   return (
     <div className="space-y-6">
-      <h3 className="font-semibold text-lg">Review & Confirm</h3>
+      <h3 className="font-extrabold text-lg text-white">Review & Confirm Details</h3>
       
-      <div className="space-y-4 text-sm bg-zinc-900/30 p-4 border border-zinc-800 rounded-lg">
-        <div className="grid grid-cols-2 gap-4">
+      <div className="space-y-4 text-sm bg-zinc-900/90 p-5 border border-zinc-700 rounded-xl shadow-xl">
+        <div className="grid grid-cols-2 gap-5">
           <div>
-            <span className="text-muted-foreground block text-xs">Name</span>
-            <span className="font-medium text-white">{residentDetails?.name}</span>
+            <span className="text-zinc-400 font-bold block text-[10px] uppercase tracking-wider">Full Name</span>
+            <span className="font-extrabold text-zinc-100 text-sm md:text-base">{residentDetails?.name}</span>
           </div>
           <div>
-            <span className="text-muted-foreground block text-xs">Phone</span>
-            <span className="font-medium text-white">{residentDetails?.phone}</span>
+            <span className="text-zinc-400 font-bold block text-[10px] uppercase tracking-wider">WhatsApp Phone</span>
+            <span className="font-extrabold text-zinc-100 text-sm md:text-base">{residentDetails?.phone}</span>
           </div>
           <div>
-            <span className="text-muted-foreground block text-xs">Bed Selected</span>
-            <span className="font-medium text-white">Bed {bedId}</span>
+            <span className="text-zinc-400 font-bold block text-[10px] uppercase tracking-wider">Allocated Room & Bed</span>
+            <span className="font-extrabold text-zinc-150 text-white text-sm md:text-base">
+              {roomNumber && bedLabel ? `Room ${roomNumber} — Bed ${bedLabel}` : `Bed ${bedId}`}
+            </span>
           </div>
           <div>
-            <span className="text-muted-foreground block text-xs">Move-in Date</span>
-            <span className="font-medium text-white">
-              {residentDetails?.moveInDate?.toLocaleDateString()}
+            <span className="text-zinc-400 font-bold block text-[10px] uppercase tracking-wider">Move-in Date</span>
+            <span className="font-extrabold text-zinc-100 text-sm md:text-base">
+              {residentDetails?.moveInDate?.toLocaleDateString('en-IN', {
+                day: 'numeric',
+                month: 'short',
+                year: 'numeric'
+              })}
             </span>
           </div>
           
           {!isQuickAdd && (
             <>
               <div>
-                <span className="text-muted-foreground block text-xs">Monthly Rent</span>
-                <span className="font-medium text-emerald-400">₹{rentConfig?.monthlyRent}</span>
+                <span className="text-zinc-400 font-bold block text-[10px] uppercase tracking-wider">Monthly Rent</span>
+                <span className="font-extrabold text-emerald-400 text-sm md:text-base">₹{rentConfig?.monthlyRent?.toLocaleString('en-IN')}</span>
               </div>
               <div>
-                <span className="text-muted-foreground block text-xs">Security Deposit</span>
-                <span className="font-medium text-emerald-400">₹{rentConfig?.securityDeposit}</span>
+                <span className="text-zinc-400 font-bold block text-[10px] uppercase tracking-wider">Security Deposit</span>
+                <span className="font-extrabold text-emerald-400 text-sm md:text-base">₹{rentConfig?.securityDeposit?.toLocaleString('en-IN')}</span>
               </div>
             </>
           )}
         </div>
 
         {isQuickAdd && (
-          <div className="mt-4 pt-4 border-t border-zinc-800 text-amber-500 bg-amber-500/5 p-3 rounded-lg text-xs font-medium">
-            Note: This is a Quick Add. Rent config and KYC documentation must be settled later.
+          <div className="mt-4 pt-4 border-t border-zinc-800 text-amber-400 bg-amber-500/10 p-3 rounded-lg text-xs font-bold leading-relaxed border border-amber-500/20">
+            Note: Quick Add active. Rent structure and identity documents must be configured later.
           </div>
         )}
       </div>
@@ -160,14 +171,14 @@ export function ReviewConfirmation() {
       <div className="flex gap-2 pt-4">
         <Button 
           variant="outline" 
-          className="w-1/2" 
+          className="w-1/2 border-zinc-800 hover:bg-zinc-900 text-zinc-300" 
           onClick={() => setStep(isQuickAdd ? 2 : 4)}
           disabled={isSubmitting}
         >
           Back
         </Button>
         <Button 
-          className="w-1/2" 
+          className="w-1/2 bg-primary hover:bg-primary/95 text-white font-extrabold" 
           onClick={handleSubmit} 
           disabled={isSubmitting}
         >

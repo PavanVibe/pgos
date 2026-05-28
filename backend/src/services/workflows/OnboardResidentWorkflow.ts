@@ -18,7 +18,8 @@ export class OnboardResidentWorkflow {
     monthlyRent: number,
     securityDeposit: number,
     actorId: string,
-    isQuickAdd = false
+    isQuickAdd = false,
+    kycDocUrl?: string
   ) {
     // 1. Concurrency Check: Check & acquire Redis lock
     const isAllowed = await BedLockService.canMutate(bedId, actorId);
@@ -49,8 +50,8 @@ export class OnboardResidentWorkflow {
         const cleanPhone = phone.replace(/\s/g, '');
         const globalTenant = await tx.globalTenant.upsert({
           where: { phone: cleanPhone },
-          update: { name, email },
-          create: { phone: cleanPhone, name, email }
+          update: { name, email, kycDocUrl },
+          create: { phone: cleanPhone, name, email, kycDocUrl }
         });
 
         // Fetch bed to resolve parent room number and roomId

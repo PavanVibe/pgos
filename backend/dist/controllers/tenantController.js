@@ -36,7 +36,8 @@ const onboardSchema = zod_1.z.object({
     moveInDate: zod_1.z.string(),
     monthlyRent: zod_1.z.number().positive(),
     securityDeposit: zod_1.z.number().nonnegative(),
-    isQuickAdd: zod_1.z.boolean().default(false)
+    isQuickAdd: zod_1.z.boolean().default(false),
+    kycDocUrl: zod_1.z.string().optional()
 });
 const onboard = async (req, res) => {
     try {
@@ -55,7 +56,7 @@ const onboard = async (req, res) => {
         if (activeProfile) {
             return res.status(409).json({ error: 'Bed already occupied. Refresh occupancy map.' });
         }
-        const profile = await OnboardResidentWorkflow_1.OnboardResidentWorkflow.execute(pgId, payload.bedId, payload.phone, payload.name, payload.email || undefined, new Date(payload.moveInDate), payload.monthlyRent, payload.securityDeposit, actorId, payload.isQuickAdd);
+        const profile = await OnboardResidentWorkflow_1.OnboardResidentWorkflow.execute(pgId, payload.bedId, payload.phone, payload.name, payload.email || undefined, new Date(payload.moveInDate), payload.monthlyRent, payload.securityDeposit, actorId, payload.isQuickAdd, payload.kycDocUrl);
         res.status(200).json({ status: 'success', data: profile });
     }
     catch (error) {

@@ -2,7 +2,7 @@ export declare class OnboardResidentWorkflow {
     /**
      * Executes the complete transaction-safe resident onboarding.
      */
-    static execute(pgId: string, bedId: string, phone: string, name: string, email: string | undefined, moveInDate: Date, monthlyRent: number, securityDeposit: number, actorId: string, isQuickAdd?: boolean): Promise<{
+    static execute(pgId: string, bedId: string, phone: string, name: string, email: string | undefined, moveInDate: Date, monthlyRent: number, securityDeposit: number, actorId: string, isQuickAdd?: boolean, kycDocUrl?: string): Promise<{
         id: string;
         createdBy: string | null;
         updatedBy: string | null;

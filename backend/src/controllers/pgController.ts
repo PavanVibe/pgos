@@ -572,14 +572,19 @@ export const sendReminderManual = async (req: Request, res: Response) => {
 
     const latestOverdue = profile.invoices[0];
     const amount = latestOverdue ? latestOverdue.amount : 10000; // default/prorated fallback
-    const days = latestOverdue ? Math.max(1, Math.floor((Date.now() - new Date(latestOverdue.dueDate).getTime()) / (1000 * 60 * 60 * 24))) : 3;
+    
+    // Calculate exact difference in calendar days unaligned with timezone shifts
+    const todayNormalized = new Date(new Date().setHours(0, 0, 0, 0));
+    const dueNormalized = latestOverdue ? new Date(new Date(latestOverdue.dueDate).setHours(0, 0, 0, 0)) : todayNormalized;
+    const diffDays = Math.round((dueNormalized.getTime() - todayNormalized.getTime()) / (1000 * 60 * 60 * 24));
+    const days = diffDays < 0 ? Math.abs(diffDays).toString() : diffDays.toString();
 
     const variables = {
       name: profile.globalTenant.name || 'Resident',
       amount: amount.toString(),
       room: profile.bed?.room?.number || profile.historicalRoomNumber || 'N/A',
       bed: profile.bed?.bedNumber || profile.historicalBedNumber || 'N/A',
-      days: days.toString()
+      days
     };
 
     // 2. Dispatch reminder using WhatsAppService

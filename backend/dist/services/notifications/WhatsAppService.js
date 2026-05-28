@@ -13,10 +13,20 @@ class WhatsAppService {
         const days = vars.days || '0';
         const category = vars.category || 'General';
         switch (templateType) {
-            case 'rent_due_tomorrow':
+            case 'rent_due_tomorrow': {
+                const days = vars.days || '1';
+                if (days === '0') {
+                    return `Hi ${name},\nJust a quick heads-up that your rent of ₹${amount} for Room ${room} Bed ${bed} is due today. Please clear when possible!`;
+                }
+                else if (days !== '1') {
+                    return `Hi ${name},\nJust a quick heads-up that your rent of ₹${amount} for Room ${room} Bed ${bed} is due in ${days} days. Please clear when possible!`;
+                }
                 return `Hi ${name},\nJust a quick heads-up that your rent of ₹${amount} for Room ${room} Bed ${bed} is due tomorrow. Please clear when possible!`;
-            case 'rent_overdue':
-                return `Hi ${name},\nYour rent of ₹${amount} for Room ${room} Bed ${bed} is still pending. Please clear when possible.`;
+            }
+            case 'rent_overdue': {
+                const days = vars.days || '3';
+                return `Hi ${name},\nYour rent of ₹${amount} for Room ${room} Bed ${bed} is overdue by ${days} days. Please clear when possible.`;
+            }
             case 'payment_received':
                 return `Hi ${name},\nWe have successfully received your rent payment of ₹${amount}. Thank you!`;
             case 'complaint_resolved':

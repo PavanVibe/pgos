@@ -13,7 +13,7 @@ class OnboardResidentWorkflow {
     /**
      * Executes the complete transaction-safe resident onboarding.
      */
-    static async execute(pgId, bedId, phone, name, email, moveInDate, monthlyRent, securityDeposit, actorId, isQuickAdd = false) {
+    static async execute(pgId, bedId, phone, name, email, moveInDate, monthlyRent, securityDeposit, actorId, isQuickAdd = false, kycDocUrl) {
         // 1. Concurrency Check: Check & acquire Redis lock
         const isAllowed = await BedLockService_1.BedLockService.canMutate(bedId, actorId);
         if (!isAllowed) {
@@ -40,8 +40,8 @@ class OnboardResidentWorkflow {
                 const cleanPhone = phone.replace(/\s/g, '');
                 const globalTenant = await tx.globalTenant.upsert({
                     where: { phone: cleanPhone },
-                    update: { name, email },
-                    create: { phone: cleanPhone, name, email }
+                    update: { name, email, kycDocUrl },
+                    create: { phone: cleanPhone, name, email, kycDocUrl }
                 });
                 // Fetch bed to resolve parent room number and roomId
                 const bed = await tx.bed.findUnique({

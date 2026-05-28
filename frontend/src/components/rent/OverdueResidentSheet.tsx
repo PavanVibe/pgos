@@ -97,9 +97,20 @@ export default function OverdueResidentSheet({ pgId }: { pgId: string }) {
 
   // Prefilled WhatsApp URL generator - aligned with respectful human tone
   const getWhatsAppUrl = (resident: OverdueResident) => {
-    const text = resident.status === 'PENDING'
-      ? `Hi ${resident.tenantName},\nJust a quick heads-up that your rent of ₹${resident.amount.toLocaleString('en-IN')} for Room ${resident.roomNumber} Bed ${resident.bedNumber} is due tomorrow. Please clear when possible!`
-      : `Hi ${resident.tenantName},\nYour rent of ₹${resident.amount.toLocaleString('en-IN')} for Room ${resident.roomNumber} Bed ${resident.bedNumber} is still pending. Please clear when possible.`;
+    const todayNormalized = new Date(new Date().setHours(0, 0, 0, 0));
+    const dueNormalized = new Date(new Date(resident.dueDate).setHours(0, 0, 0, 0));
+    const diffDays = Math.round((dueNormalized.getTime() - todayNormalized.getTime()) / (1000 * 60 * 60 * 24));
+
+    let text = '';
+    if (diffDays === 0) {
+      text = `Hi ${resident.tenantName},\nJust a quick heads-up that your rent of ₹${resident.amount.toLocaleString('en-IN')} for Room ${resident.roomNumber} Bed ${resident.bedNumber} is due today. Please clear when possible!`;
+    } else if (diffDays === 1) {
+      text = `Hi ${resident.tenantName},\nJust a quick heads-up that your rent of ₹${resident.amount.toLocaleString('en-IN')} for Room ${resident.roomNumber} Bed ${resident.bedNumber} is due tomorrow. Please clear when possible!`;
+    } else if (diffDays > 1) {
+      text = `Hi ${resident.tenantName},\nJust a quick heads-up that your rent of ₹${resident.amount.toLocaleString('en-IN')} for Room ${resident.roomNumber} Bed ${resident.bedNumber} is due in ${diffDays} days. Please clear when possible!`;
+    } else {
+      text = `Hi ${resident.tenantName},\nYour rent of ₹${resident.amount.toLocaleString('en-IN')} for Room ${resident.roomNumber} Bed ${resident.bedNumber} is overdue by ${Math.abs(diffDays)} days. Please clear when possible.`;
+    }
     return `https://wa.me/${resident.phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(text)}`;
   };
 
@@ -273,21 +284,28 @@ export default function OverdueResidentSheet({ pgId }: { pgId: string }) {
 
                       {/* Overdue/Pending Badges */}
                       {(() => {
-                        if (res.status === 'PENDING') {
-                          const diff = new Date(res.dueDate).getTime() - Date.now();
-                          const daysLeft = Math.ceil(diff / (1000 * 60 * 60 * 24));
-                          if (daysLeft <= 0) return <span className="text-[10px] font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded">Due today</span>;
+                        const todayNormalized = new Date(new Date().setHours(0, 0, 0, 0));
+                        const dueNormalized = new Date(new Date(res.dueDate).setHours(0, 0, 0, 0));
+                        const diffDays = Math.round((dueNormalized.getTime() - todayNormalized.getTime()) / (1000 * 60 * 60 * 24));
+
+                        if (diffDays === 0) {
+                          return <span className="text-[10px] font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded">Due today</span>;
+                        } else if (diffDays === 1) {
+                          return <span className="text-[10px] font-bold text-blue-400 bg-blue-500/10 border border-blue-500/20 px-2 py-0.5 rounded">Due tomorrow</span>;
+                        } else if (diffDays > 1) {
                           return (
                             <span className="text-[10px] font-bold text-zinc-400 bg-zinc-900 border border-zinc-800 px-2 py-0.5 rounded">
-                              Due in {daysLeft} day{daysLeft !== 1 ? 's' : ''}
+                              Due in {diffDays} days
+                            </span>
+                          );
+                        } else {
+                          const absDays = Math.abs(diffDays);
+                          return (
+                            <span className="text-[10px] font-bold text-red-400 bg-red-500/10 border border-red-500/20 px-2 py-0.5 rounded">
+                              Overdue by {absDays} day{absDays !== 1 ? 's' : ''}
                             </span>
                           );
                         }
-                        return (
-                          <span className="text-[10px] font-bold text-red-400 bg-red-500/10 border border-red-500/20 px-2 py-0.5 rounded">
-                            {res.daysOverdue} days late
-                          </span>
-                        );
                       })()}
                     </div>
 
@@ -433,17 +451,21 @@ export default function OverdueResidentSheet({ pgId }: { pgId: string }) {
               <div className="bg-zinc-900 border border-zinc-850 p-4 rounded-xl space-y-1.5">
                 <p className="text-[10px] text-zinc-500 uppercase font-bold tracking-wide">Prefilled Message Draft</p>
                 <p className="text-xs text-zinc-300 leading-relaxed font-medium italic">
-                  {previewResident.status === 'PENDING' ? (
-                    <>
-                      "Hi {previewResident.tenantName},<br />
-                      Just a quick heads-up that your rent of ₹{previewResident.amount.toLocaleString('en-IN')} for Room {previewResident.roomNumber} Bed {previewResident.bedNumber} is due tomorrow. Please clear when possible!"
-                    </>
-                  ) : (
-                    <>
-                      "Hi {previewResident.tenantName},<br />
-                      Your rent of ₹{previewResident.amount.toLocaleString('en-IN')} for Room {previewResident.roomNumber} Bed {previewResident.bedNumber} is still pending. Please clear when possible."
-                    </>
-                  )}
+                  {(() => {
+                    const todayNormalized = new Date(new Date().setHours(0, 0, 0, 0));
+                    const dueNormalized = new Date(new Date(previewResident.dueDate).setHours(0, 0, 0, 0));
+                    const diffDays = Math.round((dueNormalized.getTime() - todayNormalized.getTime()) / (1000 * 60 * 60 * 24));
+
+                    if (diffDays === 0) {
+                      return `Hi ${previewResident.tenantName},\nJust a quick heads-up that your rent of ₹${previewResident.amount.toLocaleString('en-IN')} for Room ${previewResident.roomNumber} Bed ${previewResident.bedNumber} is due today. Please clear when possible!`;
+                    } else if (diffDays === 1) {
+                      return `Hi ${previewResident.tenantName},\nJust a quick heads-up that your rent of ₹${previewResident.amount.toLocaleString('en-IN')} for Room ${previewResident.roomNumber} Bed ${previewResident.bedNumber} is due tomorrow. Please clear when possible!`;
+                    } else if (diffDays > 1) {
+                      return `Hi ${previewResident.tenantName},\nJust a quick heads-up that your rent of ₹${previewResident.amount.toLocaleString('en-IN')} for Room ${previewResident.roomNumber} Bed ${previewResident.bedNumber} is due in ${diffDays} days. Please clear when possible!`;
+                    } else {
+                      return `Hi ${previewResident.tenantName},\nYour rent of ₹${previewResident.amount.toLocaleString('en-IN')} for Room ${previewResident.roomNumber} Bed ${previewResident.bedNumber} is overdue by ${Math.abs(diffDays)} days. Please clear when possible.`;
+                    }
+                  })()}
                 </p>
               </div>
 

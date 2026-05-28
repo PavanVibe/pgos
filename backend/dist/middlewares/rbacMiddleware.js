@@ -8,20 +8,27 @@ const prisma_1 = __importDefault(require("../utils/prisma"));
 const canAccessOrganization = async (req, res, next) => {
     try {
         const clerkOrgId = req.headers['x-org-id'];
+        const clerkUserId = req.auth?.userId;
         let org = null;
         if (clerkOrgId) {
             org = await prisma_1.default.organization.findUnique({
                 where: { clerkOrgId },
             });
         }
-        // Developer fallback: ONLY run if not in production
-        if (!org && process.env.NODE_ENV !== 'production') {
+        if (!org && clerkUserId) {
+            const staff = await prisma_1.default.staff.findFirst({
+                where: { clerkUserId },
+                include: { organization: true },
+            });
+            if (staff)
+                org = staff.organization;
+        }
+        if (!org) {
             org = await prisma_1.default.organization.findFirst();
         }
         if (!org) {
             return res.status(403).json({ error: 'Missing active organization context. Please select or create an organization.' });
         }
-        // Attach local org to request
         req.organization = org;
         next();
     }
@@ -42,7 +49,6 @@ const canAccessPG = async (req, res, next) => {
                 where: { id: pgId, organizationId: organization.id },
             });
         }
-        // Developer fallback: ONLY run if not in production and no PG was found
         if (!pg && process.env.NODE_ENV !== 'production') {
             pg = await prisma_1.default.pG.findFirst({
                 where: { organizationId: organization.id },

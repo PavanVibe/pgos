@@ -33,7 +33,8 @@ const onboardSchema = z.object({
   moveInDate: z.string(),
   monthlyRent: z.number().positive(),
   securityDeposit: z.number().nonnegative(),
-  isQuickAdd: z.boolean().default(false)
+  isQuickAdd: z.boolean().default(false),
+  kycDocUrl: z.string().optional()
 });
 
 export const onboard = async (req: Request, res: Response) => {
@@ -66,7 +67,8 @@ export const onboard = async (req: Request, res: Response) => {
       payload.monthlyRent,
       payload.securityDeposit,
       actorId,
-      payload.isQuickAdd
+      payload.isQuickAdd,
+      payload.kycDocUrl
     );
 
     res.status(200).json({ status: 'success', data: profile });
