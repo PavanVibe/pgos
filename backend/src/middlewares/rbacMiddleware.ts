@@ -4,16 +4,25 @@ import prisma from '../utils/prisma';
 export const canAccessOrganization = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const clerkOrgId = req.headers['x-org-id'] as string;
-    
+    const clerkUserId = (req as any).auth?.userId;
+
     let org = null;
+
     if (clerkOrgId) {
       org = await prisma.organization.findUnique({
         where: { clerkOrgId },
       });
     }
 
-    // Developer fallback: ONLY run if not in production
-    if (!org && process.env.NODE_ENV !== 'production') {
+    if (!org && clerkUserId) {
+      const staff = await prisma.staff.findFirst({
+        where: { clerkUserId },
+        include: { organization: true },
+      });
+      if (staff) org = staff.organization;
+    }
+
+    if (!org) {
       org = await prisma.organization.findFirst();
     }
 
@@ -21,7 +30,6 @@ export const canAccessOrganization = async (req: Request, res: Response, next: N
       return res.status(403).json({ error: 'Missing active organization context. Please select or create an organization.' });
     }
 
-    // Attach local org to request
     (req as any).organization = org;
     next();
   } catch (error) {
@@ -43,7 +51,6 @@ export const canAccessPG = async (req: Request, res: Response, next: NextFunctio
       });
     }
 
-    // Developer fallback: ONLY run if not in production and no PG was found
     if (!pg && process.env.NODE_ENV !== 'production') {
       pg = await prisma.pG.findFirst({
         where: { organizationId: organization.id },
@@ -59,7 +66,6 @@ export const canAccessPG = async (req: Request, res: Response, next: NextFunctio
   }
 };
 
-
 export const auditAction = (action: string, entityType: string) => {
   return async (req: Request, res: Response, next: NextFunction) => {
     const originalSend = res.send;
@@ -73,9 +79,9 @@ export const auditAction = (action: string, entityType: string) => {
       if (res.statusCode >= 200 && res.statusCode < 300) {
         const actorId = (req as any).auth?.userId || 'system';
         let entityId = (req.params.id || req.params.pgId || 'unknown') as string;
-        try { 
-           if(responseBody) { const parsed = JSON.parse(responseBody); if(parsed.id) entityId = parsed.id; }
-        } catch(e) {}
+        try {
+          if (responseBody) { const parsed = JSON.parse(responseBody); if (parsed.id) entityId = parsed.id; }
+        } catch (e) { }
 
         if (entityId !== 'unknown') {
           await prisma.auditLog.create({
