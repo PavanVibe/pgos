@@ -4,7 +4,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("postgresql://pgos_user:pgos_password@localhost:5432/pgos_db?schema=public")
+  url      = env("DATABASE_URL")
 }
 
 enum SubscriptionTier {
