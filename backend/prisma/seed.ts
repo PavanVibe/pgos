@@ -9,18 +9,36 @@ const pool = new Pool({ connectionString });
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
-
 async function main() {
   console.log('Starting DB Seed...');
 
-  // 1. Create Organizations
-  const orgNames = ['Stanza Lite', 'Zolo Standard', 'Nestaway Premium'];
+  // Clear existing data
+  await prisma.complaint.deleteMany();
+  await prisma.rentInvoice.deleteMany();
+  await prisma.pGTenantProfile.deleteMany();
+  await prisma.globalTenant.deleteMany();
+  await prisma.bed.deleteMany();
+  await prisma.room.deleteMany();
+  await prisma.expense.deleteMany();
+  await prisma.pG.deleteMany();
+  await prisma.staff.deleteMany();
+  await prisma.organization.deleteMany();
+
+  console.log('Cleared existing data.');
+
+  // 1. Create Organizations — first one uses your real Clerk org ID
+  const orgData = [
+    { name: 'Stamm Grove Residency', clerkOrgId: 'org_3ELZDyVuL352phd5rNkhpBM3QdX' },
+    { name: 'Zolo Standard', clerkOrgId: faker.string.uuid() },
+    { name: 'Nestaway Premium', clerkOrgId: faker.string.uuid() },
+  ];
+
   const orgs = [];
-  for (const name of orgNames) {
+  for (const data of orgData) {
     const org = await prisma.organization.create({
       data: {
-        name,
-        clerkOrgId: faker.string.uuid(),
+        name: data.name,
+        clerkOrgId: data.clerkOrgId,
         subscriptionTier: SubscriptionTier.GROWTH,
       }
     });
@@ -29,7 +47,20 @@ async function main() {
 
   console.log(`Created ${orgs.length} Organizations.`);
 
-  // 2. Create PGs
+  // 2. Create Staff (link your real user to the first org)
+  await prisma.staff.create({
+    data: {
+      organizationId: orgs[0]!.id,
+      clerkUserId: 'user_3DwfiAMqxJVwH48O2D1ODuDLsBV',
+      name: 'Pavan',
+      phone: '9999999999',
+      role: 'MANAGER',
+    }
+  });
+
+  console.log('Created Staff member.');
+
+  // 3. Create PGs
   const pgs = [];
   for (let i = 0; i < 10; i++) {
     const org = orgs[i % orgs.length]!;
@@ -46,7 +77,7 @@ async function main() {
 
   console.log(`Created ${pgs.length} PGs.`);
 
-  // 3. Create Rooms and Beds
+  // 4. Create Rooms and Beds
   const beds = [];
   let roomCount = 0;
   for (const pg of pgs) {
@@ -76,7 +107,7 @@ async function main() {
 
   console.log(`Created ${roomCount} Rooms and ${beds.length} Beds.`);
 
-  // 4. Create Tenants
+  // 5. Create Tenants
   const activeBeds = faker.helpers.shuffle(beds).slice(0, 350);
 
   let tenantCount = 0;
@@ -139,7 +170,6 @@ async function main() {
   console.log(`Created ${tenantCount} Active Tenants.`);
   console.log(`Created ${invoiceCount} Pending Invoices.`);
   console.log(`Created ${complaintCount} Complaints.`);
-
   console.log('DB Seeding Completed!');
 }
 
