@@ -1,6 +1,5 @@
 import express, { Request, Response } from 'express';
 import cors from 'cors';
-import helmet from 'helmet';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
 
@@ -9,17 +8,10 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Middlewares
-app.use(helmet());
-app.use(cors({
-  origin: process.env.CORS_ORIGIN || '*',
-  credentials: false,
-}));
-console.log('CORS set to allow all origins');
+app.use(cors({ origin: '*', credentials: false }));
 app.use(morgan('dev'));
 app.use(express.json());
 
-// Routes
 app.get('/health', (req: Request, res: Response) => {
   res.status(200).json({ status: 'OK', message: 'PGOS API is running.' });
 });
