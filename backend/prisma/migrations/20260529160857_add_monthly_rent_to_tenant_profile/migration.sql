@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "PGTenantProfile" ADD COLUMN     "monthlyRent" DOUBLE PRECISION NOT NULL DEFAULT 0;
