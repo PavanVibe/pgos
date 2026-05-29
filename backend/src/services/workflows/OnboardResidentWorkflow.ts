@@ -20,7 +20,8 @@ export class OnboardResidentWorkflow {
     actorId: string,
     isQuickAdd = false,
     kycDocUrl?: string,
-    bypassEmailCheck = false
+    bypassEmailCheck = false,
+    transferResident = false
   ) {
     // 1. Concurrency Check: Check & acquire Redis lock
     const isAllowed = await BedLockService.canMutate(bedId, actorId);
@@ -60,14 +61,58 @@ export class OnboardResidentWorkflow {
           ? await tx.globalTenant.findUnique({ where: { email: cleanEmail } })
           : null;
 
+        // Block identity mismatch (Rule 3)
+        if (tenantByPhone && tenantByEmail && tenantByPhone.id !== tenantByEmail.id) {
+          throw new Error('CONFLICT_DIFFERENT_RECORDS');
+        }
+
+        // Check for active stays on the resolved/matching tenant BEFORE creating a new profile
+        const matchedTenant = tenantByPhone || tenantByEmail;
+        if (matchedTenant) {
+          const activeStay = await tx.pGTenantProfile.findFirst({
+            where: {
+              globalTenantId: matchedTenant.id,
+              status: { in: [TenantStatus.ACTIVE, TenantStatus.NOTICE] }
+            },
+            include: { room: true, bed: true }
+          });
+
+          if (activeStay) {
+            if (!transferResident) {
+              const activeRoomNum = activeStay.historicalRoomNumber || activeStay.room?.number || 'N/A';
+              const activeBedLabel = activeStay.historicalBedNumber || activeStay.bed?.bedNumber || 'N/A';
+              throw new Error(`WARNING_ACTIVE_OCCUPANCY:${activeRoomNum}:${activeBedLabel}:${activeStay.id}`);
+            }
+
+            // Auto-transfer: vacate from old bed
+            await tx.pGTenantProfile.update({
+              where: { id: activeStay.id },
+              data: {
+                status: TenantStatus.PAST,
+                moveOutDate: new Date(),
+                bedId: null, // Free the old bed
+                updatedBy: actorId,
+              }
+            });
+
+            // Write transfer audit log
+            await tx.auditLog.create({
+              data: {
+                actorId,
+                action: 'RESIDENT_TRANSFERRED_OUT',
+                entityType: 'PGTenantProfile',
+                entityId: activeStay.id,
+                metadata: { pgId, bedId: activeStay.bedId }
+              }
+            });
+          }
+        }
+
         let globalTenant;
 
-        if (tenantByPhone && tenantByEmail && tenantByPhone.id !== tenantByEmail.id) {
-          // Rule 3: Identity Mismatch
-          throw new Error('CONFLICT_DIFFERENT_RECORDS');
-        } else if (tenantByPhone) {
+        if (tenantByPhone) {
           // Rule 1: Phone Match
-          // Do not silently overwrite existing email if it differs
+          // Do NOT mutate or overwrite existing email or name if they are already present!
           let updatedEmail = tenantByPhone.email;
           if (!updatedEmail && cleanEmail) {
             updatedEmail = cleanEmail;
@@ -75,9 +120,9 @@ export class OnboardResidentWorkflow {
           globalTenant = await tx.globalTenant.update({
             where: { id: tenantByPhone.id },
             data: {
-              name: name || tenantByPhone.name,
+              name: tenantByPhone.name || name, // Keep existing name
               email: updatedEmail,
-              kycDocUrl: kycDocUrl || tenantByPhone.kycDocUrl
+              kycDocUrl: tenantByPhone.kycDocUrl || kycDocUrl
             }
           });
         } else if (tenantByEmail) {
@@ -85,13 +130,13 @@ export class OnboardResidentWorkflow {
           if (!bypassEmailCheck) {
             throw new Error(`WARNING_EMAIL_EXISTS:${tenantByEmail.id}:${tenantByEmail.name || 'Unknown'}:${tenantByEmail.phone}:${tenantByEmail.email || ''}`);
           }
-          // If bypassEmailCheck is true, reuse and update the profile with the new phone
+          // Reuse existing resident - owner explicitly clicked Reuse, so they consent to updating phone
           globalTenant = await tx.globalTenant.update({
             where: { id: tenantByEmail.id },
             data: {
-              phone: cleanPhone,
-              name: name || tenantByEmail.name,
-              kycDocUrl: kycDocUrl || tenantByEmail.kycDocUrl
+              phone: cleanPhone, // Consent given
+              name: tenantByEmail.name || name, // Keep existing name
+              kycDocUrl: tenantByEmail.kycDocUrl || kycDocUrl
             }
           });
         } else {

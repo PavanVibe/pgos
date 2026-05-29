@@ -35,7 +35,8 @@ const onboardSchema = z.object({
   securityDeposit: z.number().nonnegative(),
   isQuickAdd: z.boolean().default(false),
   kycDocUrl: z.string().optional(),
-  bypassEmailCheck: z.boolean().optional()
+  bypassEmailCheck: z.boolean().optional(),
+  transferResident: z.boolean().optional()
 });
 
 export const onboard = async (req: Request, res: Response) => {
@@ -70,13 +71,26 @@ export const onboard = async (req: Request, res: Response) => {
       actorId,
       payload.isQuickAdd,
       payload.kycDocUrl,
-      payload.bypassEmailCheck || false
+      payload.bypassEmailCheck || false,
+      payload.transferResident || false
     );
 
     res.status(200).json({ status: 'success', data: profile });
   } catch (error: any) {
     if (error.message && error.message.includes('already occupied')) {
       return res.status(409).json({ error: error.message });
+    }
+    if (error.message && error.message.startsWith('WARNING_ACTIVE_OCCUPANCY:')) {
+      const parts = error.message.split(':');
+      return res.status(200).json({
+        status: 'warning',
+        code: 'ACTIVE_OCCUPANCY',
+        allocation: {
+          roomNumber: parts[1],
+          bedLabel: parts[2],
+          profileId: parts[3]
+        }
+      });
     }
     if (error.message && error.message.startsWith('WARNING_EMAIL_EXISTS:')) {
       const parts = error.message.split(':');

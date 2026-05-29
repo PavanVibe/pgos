@@ -16,6 +16,7 @@ export function ReviewConfirmation() {
   
   const queryClient = useQueryClient();
   const [warningTenant, setWarningTenant] = useState<{ id: string; name: string; phone: string; email: string } | null>(null);
+  const [activeOccupancyWarning, setActiveOccupancyWarning] = useState<{ roomNumber: string; bedLabel: string; profileId: string } | null>(null);
 
   // 1. Onboarding Mutation
   const onboardingMutation = useMutation({
@@ -54,6 +55,10 @@ export function ReviewConfirmation() {
     onSuccess: (data) => {
       if (data?.status === 'warning' && data?.code === 'EMAIL_EXISTS') {
         setWarningTenant(data.tenant);
+        return;
+      }
+      if (data?.status === 'warning' && data?.code === 'ACTIVE_OCCUPANCY') {
+        setActiveOccupancyWarning(data.allocation);
         return;
       }
 
@@ -96,7 +101,7 @@ export function ReviewConfirmation() {
     }
   });
 
-  const handleSubmit = (bypassEmailCheck = false) => {
+  const handleSubmit = (bypassEmailCheck = false, transferResident = false) => {
     if (!pgId || !bedId || !residentDetails) {
       toast.error('Onboarding context missing.');
       return;
@@ -116,7 +121,8 @@ export function ReviewConfirmation() {
       securityDeposit: rentConfig?.securityDeposit || 0,
       isQuickAdd,
       kycDocUrl,
-      bypassEmailCheck
+      bypassEmailCheck,
+      transferResident
     };
 
     onboardingMutation.mutate(payload);
@@ -219,7 +225,7 @@ export function ReviewConfirmation() {
               </div>
               <div className="flex justify-between py-1 border-b border-zinc-900">
                 <span className="text-zinc-500 font-medium">Email:</span>
-                <span className="font-extrabold text-zinc-200">{residentDetails?.email}</span>
+                <span className="font-extrabold text-zinc-200">{warningTenant.email}</span>
               </div>
               <div className="text-amber-500 font-semibold text-[11px] pt-1 text-center leading-normal">
                 Would you like to create a new stay using the existing profile?
@@ -245,6 +251,60 @@ export function ReviewConfirmation() {
                 className="w-full border-zinc-800 hover:bg-zinc-950 text-zinc-400 font-bold py-2.5 rounded-xl"
               >
                 Create New Resident Using Different Email
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeOccupancyWarning && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="w-full max-w-md bg-zinc-900 border border-red-500/30 rounded-2xl p-6 shadow-2xl space-y-6 text-zinc-100 animate-in zoom-in-95 duration-200">
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-red-500 font-extrabold uppercase tracking-wide text-xs">
+                <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse" />
+                Resident Already Occupying A Bed
+              </div>
+              <h4 className="text-xl font-black text-white">Active Occupancy Detected</h4>
+              <p className="text-zinc-400 text-xs leading-relaxed font-semibold">
+                This resident is currently allocated to another bed in the PG system.
+              </p>
+            </div>
+
+            <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-4 space-y-3 text-xs">
+              <div className="flex justify-between py-1 border-b border-zinc-900">
+                <span className="text-zinc-500 font-medium">Resident:</span>
+                <span className="font-extrabold text-zinc-200">{residentDetails?.name}</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-zinc-900">
+                <span className="text-zinc-500 font-medium">Current Allocation:</span>
+                <span className="font-extrabold text-zinc-200">
+                  Room {activeOccupancyWarning.roomNumber} — Bed {activeOccupancyWarning.bedLabel}
+                </span>
+              </div>
+              <div className="text-red-400 font-semibold text-[11px] pt-1 text-center leading-normal">
+                To relocate them, choose Transfer Resident. This will vacate their current bed first.
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2 pt-2">
+              <Button 
+                onClick={() => {
+                  handleSubmit(false, true); // resubmit with transferResident: true
+                  setActiveOccupancyWarning(null);
+                }}
+                className="w-full bg-primary hover:bg-primary/90 text-white font-extrabold py-2.5 rounded-xl shadow-lg"
+              >
+                Transfer Resident
+              </Button>
+              <Button 
+                onClick={() => {
+                  setActiveOccupancyWarning(null);
+                }}
+                variant="outline" 
+                className="w-full border-zinc-800 hover:bg-zinc-950 text-zinc-400 font-bold py-2.5 rounded-xl"
+              >
+                Cancel
               </Button>
             </div>
           </div>
