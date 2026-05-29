@@ -122,7 +122,7 @@ export class OnboardResidentWorkflow {
             data: {
               name: tenantByPhone.name || name, // Keep existing name
               email: updatedEmail,
-              kycDocUrl: tenantByPhone.kycDocUrl || kycDocUrl
+              kycDocUrl: kycDocUrl || tenantByPhone.kycDocUrl
             }
           });
         } else if (tenantByEmail) {
@@ -136,7 +136,7 @@ export class OnboardResidentWorkflow {
             data: {
               phone: cleanPhone, // Consent given
               name: tenantByEmail.name || name, // Keep existing name
-              kycDocUrl: tenantByEmail.kycDocUrl || kycDocUrl
+              kycDocUrl: kycDocUrl || tenantByEmail.kycDocUrl
             }
           });
         } else {

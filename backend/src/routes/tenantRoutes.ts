@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { searchByPhone, onboard, lockBedForOnboarding, vacate } from '../controllers/tenantController';
+import { searchByPhone, onboard, lockBedForOnboarding, vacate, getResidentProfile } from '../controllers/tenantController';
 import { requireAuth, attachOrgContext } from '../middlewares/authMiddleware';
 import { canAccessOrganization, canAccessPG, auditAction } from '../middlewares/rbacMiddleware';
 
@@ -9,6 +9,7 @@ const router = Router();
 router.use(requireAuth as any, attachOrgContext, canAccessOrganization);
 
 router.get('/search-by-phone', searchByPhone);
+router.get('/profiles/:profileId', getResidentProfile);
 
 router.post(
   '/pgs/:pgId/onboard',

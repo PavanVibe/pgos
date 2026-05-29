@@ -10,7 +10,8 @@ const PORT = process.env.PORT || 5000;
 
 app.use(cors({ origin: '*', credentials: false }));
 app.use(morgan('dev'));
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
 app.get('/health', (req: Request, res: Response) => {
   res.status(200).json({ status: 'OK', message: 'PGOS API is running.' });

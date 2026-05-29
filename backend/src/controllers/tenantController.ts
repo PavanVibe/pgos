@@ -144,3 +144,40 @@ export const vacate = async (req: Request, res: Response) => {
   }
 };
 
+export const getResidentProfile = async (req: Request, res: Response) => {
+  try {
+    const { profileId } = req.params;
+    if (!profileId) {
+      return res.status(400).json({ error: 'profileId is required.' });
+    }
+
+    const profile = await prisma.pGTenantProfile.findUnique({
+      where: { id: profileId as string },
+      include: {
+        globalTenant: true,
+        bed: {
+          include: {
+            room: true
+          }
+        },
+        room: true,
+        invoices: {
+          orderBy: { dueDate: 'desc' }
+        },
+        complaints: {
+          orderBy: { createdAt: 'desc' }
+        }
+      }
+    });
+
+    if (!profile) {
+      return res.status(404).json({ error: 'Resident stay profile not found.' });
+    }
+
+    res.status(200).json({ status: 'success', data: profile });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+
