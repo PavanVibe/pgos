@@ -29,6 +29,8 @@ interface OnboardingState {
   aadhaarBack: File | null;
   aadhaarFrontUrl: string | null;
   aadhaarBackUrl: string | null;
+  aadhaarFrontBase64: string | null;
+  aadhaarBackBase64: string | null;
 
   openOnboarding: (pgId: string) => void;
   closeOnboarding: () => void;
@@ -39,6 +41,8 @@ interface OnboardingState {
   setQuickAdd: (isQuick: boolean) => void;
   setAadhaarFront: (file: File | null) => void;
   setAadhaarBack: (file: File | null) => void;
+  setAadhaarFrontBase64: (base64: string | null) => void;
+  setAadhaarBackBase64: (base64: string | null) => void;
   reset: () => void;
 }
 
@@ -56,6 +60,8 @@ export const useOnboardingStore = create<OnboardingState>((set) => ({
   aadhaarBack: null,
   aadhaarFrontUrl: null,
   aadhaarBackUrl: null,
+  aadhaarFrontBase64: null,
+  aadhaarBackBase64: null,
 
   openOnboarding: (pgId) => set({ isOpen: true, pgId, step: 1 }),
   closeOnboarding: () => set({ isOpen: false }),
@@ -86,6 +92,8 @@ export const useOnboardingStore = create<OnboardingState>((set) => ({
       aadhaarBackUrl: file ? URL.createObjectURL(file) : null
     };
   }),
+  setAadhaarFrontBase64: (base64) => set({ aadhaarFrontBase64: base64 }),
+  setAadhaarBackBase64: (base64) => set({ aadhaarBackBase64: base64 }),
   reset: () => set((state) => {
     if (state.aadhaarFrontUrl) URL.revokeObjectURL(state.aadhaarFrontUrl);
     if (state.aadhaarBackUrl) URL.revokeObjectURL(state.aadhaarBackUrl);
@@ -101,6 +109,8 @@ export const useOnboardingStore = create<OnboardingState>((set) => ({
       aadhaarBack: null,
       aadhaarFrontUrl: null,
       aadhaarBackUrl: null,
+      aadhaarFrontBase64: null,
+      aadhaarBackBase64: null,
     };
   })
 }));

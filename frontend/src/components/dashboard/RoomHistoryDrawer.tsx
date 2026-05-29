@@ -25,8 +25,10 @@ import {
   CheckCircle2, 
   Clock, 
   UserMinus,
-  AlertCircle
+  AlertCircle,
+  ExternalLink
 } from 'lucide-react';
+import { useResidentProfileStore } from '@/store/useResidentProfileStore';
 
 interface GlobalTenant {
   name: string;
@@ -71,6 +73,7 @@ export function RoomHistoryDrawer({ pgId }: { pgId: string }) {
   const { openOnboarding, setBedSelection, setRentConfig, setStep } = useOnboardingStore();
   const { openVacate } = useVacateStore();
   const { openMarkPaid } = useRentStore();
+  const { openProfile } = useResidentProfileStore();
 
   const [activeTab, setActiveTab] = useState<'occupants' | 'past' | 'timeline' | 'finance' | 'complaints'>('occupants');
   const [searchQuery, setSearchQuery] = useState('');
@@ -315,7 +318,15 @@ export function RoomHistoryDrawer({ pgId }: { pgId: string }) {
                             <div className="grid grid-cols-2 gap-4 text-xs font-semibold">
                               <div>
                                 <span className="text-[10px] text-zinc-500 block uppercase">Resident</span>
-                                <span className="text-white font-bold">{activeProfile.globalTenant.name}</span>
+                                <button
+                                  onClick={() => openProfile(activeProfile.id)}
+                                  className="font-extrabold text-sm text-white mt-1.5 flex items-center gap-1.5 hover:text-primary transition-all text-left group"
+                                  title="Click to view resident stay profile ledger"
+                                >
+                                  <User className="h-4 w-4 text-primary shrink-0" />
+                                  <span className="underline decoration-dashed decoration-zinc-700 underline-offset-4">{activeProfile.globalTenant.name}</span>
+                                  <ExternalLink className="h-3 w-3 text-zinc-500 opacity-0 group-hover:opacity-100 shrink-0" />
+                                </button>
                               </div>
                               <div>
                                 <span className="text-[10px] text-zinc-500 block uppercase">Move-in Date</span>
@@ -397,9 +408,14 @@ export function RoomHistoryDrawer({ pgId }: { pgId: string }) {
                       <div key={pastProfile.id} className="bg-zinc-950/40 border border-zinc-900 rounded-xl p-4 space-y-3.5">
                         <div className="flex justify-between items-start">
                           <div>
-                            <h6 className="font-extrabold text-sm text-white">
-                              {pastProfile.globalTenant.name}
-                            </h6>
+                            <button
+                              onClick={() => openProfile(pastProfile.id)}
+                              className="font-extrabold text-sm text-white hover:text-primary transition-all text-left flex items-center gap-1.5 group"
+                              title="Click to view resident stay profile ledger"
+                            >
+                              <span className="underline decoration-dashed decoration-zinc-700 underline-offset-4">{pastProfile.globalTenant.name}</span>
+                              <ExternalLink className="h-3 w-3 text-zinc-500 opacity-0 group-hover:opacity-100 shrink-0" />
+                            </button>
                             <p className="text-[10px] text-zinc-500 mt-1 uppercase font-bold">
                               Occupied Bed {pastProfile.historicalBedNumber || 'N/A'} (Immutable Snapshot)
                             </p>

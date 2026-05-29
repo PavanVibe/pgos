@@ -12,6 +12,7 @@ export const metadata: Metadata = {
 };
 
 import { QueryProvider } from '@/providers/QueryProvider';
+import ResidentProfileDrawer from '@/components/shared/ResidentProfileDrawer';
 
 export default function RootLayout({
   children,
@@ -24,6 +25,7 @@ export default function RootLayout({
         <html lang="en">
           <body className={inter.className}>
             {children}
+            <ResidentProfileDrawer />
             <Toaster />
           </body>
         </html>

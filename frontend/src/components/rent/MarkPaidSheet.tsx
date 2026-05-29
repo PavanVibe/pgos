@@ -66,7 +66,7 @@ export default function MarkPaidSheet() {
       fetchApi(`/pgs/${activePgId}/tenants/${selectedTenantId}/pay-rent`, {
         method: 'POST',
         body: JSON.stringify({ 
-          method,
+          paymentMode: method,
           amount: parsedAmount,
           invoiceId: selectedInvoiceId
         })

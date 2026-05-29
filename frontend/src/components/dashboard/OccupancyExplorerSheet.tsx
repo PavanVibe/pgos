@@ -11,7 +11,8 @@ import { useRentStore } from '@/store/useRentStore';
 import { fetchApi } from '@/lib/api';
 import { useState } from 'react';
 import { RoomHistoryDrawer } from './RoomHistoryDrawer';
-import { TrendingUp } from 'lucide-react';
+import { TrendingUp, ExternalLink } from 'lucide-react';
+import { useResidentProfileStore } from '@/store/useResidentProfileStore';
 import { 
   Building, 
   Search, 
@@ -67,6 +68,7 @@ export default function OccupancyExplorerSheet({ pgId }: { pgId: string }) {
   const { isOccupancyOpen, closeOccupancy, selectedBedId, selectBed, selectRoom } = useOccupancyStore();
   const { openOnboarding, setBedSelection, setRentConfig, setStep } = useOnboardingStore();
   const { openVacate } = useVacateStore();
+  const { openProfile } = useResidentProfileStore();
   const { openMarkPaid } = useRentStore();
 
   const [selectedFloor, setSelectedFloor] = useState<string>('all');
@@ -347,8 +349,14 @@ export default function OccupancyExplorerSheet({ pgId }: { pgId: string }) {
                           </div>
                         </div>
                         
-                        <h4 className="text-xl font-bold text-white mt-3">
-                          {bed.tenantProfile.globalTenant?.name || 'Active Resident'}
+                        <h4 className="text-xl font-bold text-white mt-3 flex items-center justify-between">
+                          <span>{bed.tenantProfile.globalTenant?.name || 'Active Resident'}</span>
+                          <button
+                            onClick={() => openProfile(bed.tenantProfile!.id)}
+                            className="text-[10px] bg-zinc-900 border border-zinc-800 hover:text-white px-3 py-1.5 rounded-lg flex items-center gap-1 cursor-pointer font-bold select-none uppercase tracking-wide transition-all shrink-0"
+                          >
+                            <ExternalLink className="h-3 w-3" /> View Profile
+                          </button>
                         </h4>
                         <p className="text-xs text-zinc-400 mt-1">
                           Allocated to Room <strong className="text-zinc-200">{room.number}</strong> — Bed <strong className="text-zinc-200">{bed.bedNumber}</strong>

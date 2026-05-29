@@ -13,7 +13,9 @@ export function KycUploader() {
     aadhaarFrontUrl, 
     aadhaarBackUrl, 
     setAadhaarFront, 
-    setAadhaarBack 
+    setAadhaarBack,
+    setAadhaarFrontBase64,
+    setAadhaarBackBase64
   } = useOnboardingStore();
 
   const frontInputRef = useRef<HTMLInputElement>(null);
@@ -22,25 +24,56 @@ export function KycUploader() {
   const handleFrontClick = () => frontInputRef.current?.click();
   const handleBackClick = () => backInputRef.current?.click();
 
-  const handleFrontChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0] || null;
-    setAadhaarFront(file);
+  const fileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = (error) => reject(error);
+    });
   };
 
-  const handleBackChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFrontChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] || null;
+    setAadhaarFront(file);
+    if (file) {
+      try {
+        const b64 = await fileToBase64(file);
+        setAadhaarFrontBase64(b64);
+      } catch (err) {
+        console.error("Failed to convert front image:", err);
+      }
+    } else {
+      setAadhaarFrontBase64(null);
+    }
+  };
+
+  const handleBackChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] || null;
     setAadhaarBack(file);
+    if (file) {
+      try {
+        const b64 = await fileToBase64(file);
+        setAadhaarBackBase64(b64);
+      } catch (err) {
+        console.error("Failed to convert back image:", err);
+      }
+    } else {
+      setAadhaarBackBase64(null);
+    }
   };
 
   const handleRemoveFront = (e: React.MouseEvent) => {
     e.stopPropagation();
     setAadhaarFront(null);
+    setAadhaarFrontBase64(null);
     if (frontInputRef.current) frontInputRef.current.value = '';
   };
 
   const handleRemoveBack = (e: React.MouseEvent) => {
     e.stopPropagation();
     setAadhaarBack(null);
+    setAadhaarBackBase64(null);
     if (backInputRef.current) backInputRef.current.value = '';
   };
 

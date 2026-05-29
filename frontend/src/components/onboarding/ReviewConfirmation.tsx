@@ -11,7 +11,7 @@ import { useState } from 'react';
 export function ReviewConfirmation() {
   const { 
     pgId, bedId, roomNumber, bedLabel, residentDetails, rentConfig, isQuickAdd, 
-    aadhaarFront, aadhaarBack, setStep, closeOnboarding, reset 
+    aadhaarFrontBase64, aadhaarBackBase64, setStep, closeOnboarding, reset 
   } = useOnboardingStore();
   
   const queryClient = useQueryClient();
@@ -107,8 +107,8 @@ export function ReviewConfirmation() {
       return;
     }
 
-    const kycDocUrl = !isQuickAdd && aadhaarFront && aadhaarBack
-      ? `${aadhaarFront.name},${aadhaarBack.name}`
+    const kycDocUrl = !isQuickAdd && aadhaarFrontBase64 && aadhaarBackBase64
+      ? JSON.stringify({ front: aadhaarFrontBase64, back: aadhaarBackBase64 })
       : undefined;
 
     const payload = {

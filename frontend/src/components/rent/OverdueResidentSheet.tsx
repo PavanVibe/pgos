@@ -19,9 +19,11 @@ import {
   Pencil,
   Check,
   Calendar,
-  AlertTriangle
+  AlertTriangle,
+  ExternalLink
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useResidentProfileStore } from '@/store/useResidentProfileStore';
 
 interface OverdueResident {
   id: string;
@@ -43,6 +45,7 @@ interface OverdueResident {
 
 export default function OverdueResidentSheet({ pgId }: { pgId: string }) {
   const { isOverdueOpen, closeOverdue, overdueMode, openMarkPaid } = useRentStore();
+  const { openProfile } = useResidentProfileStore();
   const queryClient = useQueryClient();
 
   const [previewResident, setPreviewResident] = useState<OverdueResident | null>(null);
@@ -255,7 +258,13 @@ export default function OverdueResidentSheet({ pgId }: { pgId: string }) {
                     <div className="flex justify-between items-start">
                       <div className="space-y-0.5">
                         <div className="flex items-center gap-2">
-                          <h6 className="font-extrabold text-sm text-zinc-100">{res.tenantName}</h6>
+                          <button
+                            onClick={() => openProfile(res.tenantProfileId)}
+                            className="font-extrabold text-sm text-zinc-100 hover:text-primary hover:underline transition-colors text-left flex items-center gap-1 group/name cursor-pointer"
+                          >
+                            {res.tenantName}
+                            <ExternalLink className="h-3 w-3 opacity-50 group-hover/name:opacity-100 transition-opacity" />
+                          </button>
                           {/* Payment Reliability Badges - visually subtle and operational only */}
                           {res.reliability === 'RELIABLE' && (
                             <span className="text-[9px] font-bold text-green-400 bg-green-500/10 border border-green-500/20 px-1.5 py-0.5 rounded-full flex items-center gap-1">

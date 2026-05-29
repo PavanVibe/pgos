@@ -5,15 +5,17 @@ import { useComplaintStore } from '@/store/useComplaintStore';
 import { useOrganizationStore } from '@/store/useOrganizationStore';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Clock, MapPin, CheckCircle, AlertTriangle, Phone, Loader2 } from 'lucide-react';
+import { Clock, MapPin, CheckCircle, AlertTriangle, Phone, Loader2, ExternalLink } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchApi } from '@/lib/api';
 import { queryKeys } from '@/lib/queryKeys';
 import { toast } from 'sonner';
 import { useState } from 'react';
+import { useResidentProfileStore } from '@/store/useResidentProfileStore';
 
 export default function ComplaintDrawer() {
   const { isViewOpen, closeViewComplaint } = useComplaintStore();
+  const { openProfile } = useResidentProfileStore();
   const { activePgId } = useOrganizationStore();
   const queryClient = useQueryClient();
   const [resolvingId, setResolvingId] = useState<string | null>(null);
@@ -134,9 +136,19 @@ export default function ComplaintDrawer() {
 
                     <div className="flex items-center justify-between text-xs p-3 rounded-xl border border-zinc-900 bg-zinc-950/20">
                       <div>
-                        <p className="font-extrabold text-white">
-                          {complaint.tenantProfile?.globalTenant?.name || 'Active Resident'}
-                        </p>
+                        {complaint.tenantProfile?.id ? (
+                          <button
+                            onClick={() => openProfile(complaint.tenantProfile.id)}
+                            className="font-extrabold text-white hover:text-primary hover:underline transition-colors text-left flex items-center gap-1 group/name cursor-pointer font-sans"
+                          >
+                            {complaint.tenantProfile.globalTenant?.name || 'Active Resident'}
+                            <ExternalLink className="h-3 w-3 opacity-50 group-hover/name:opacity-100 transition-opacity shrink-0" />
+                          </button>
+                        ) : (
+                          <p className="font-extrabold text-white">
+                            {complaint.tenantProfile?.globalTenant?.name || 'Active Resident'}
+                          </p>
+                        )}
                         <p className="text-[10px] text-zinc-500 font-medium mt-0.5">
                           {complaint.tenantProfile?.globalTenant?.phone || 'No phone recorded'}
                         </p>
