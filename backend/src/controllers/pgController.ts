@@ -55,7 +55,7 @@ export const getOrganizationPGs = async (req: Request, res: Response) => {
 
 export const allocateBedController = async (req: Request, res: Response) => {
   try {
-    const { pgId } = req.params;
+    const pgId = (req as any).pg?.id || req.params.pgId;
     const { bedId, globalTenantId, securityDeposit, moveInDate } = req.body;
     const actorId = (req as any).auth?.userId || 'system';
 
@@ -78,7 +78,7 @@ import { ResolveComplaintWorkflow } from '../services/workflows/ResolveComplaint
  */
 export const getPGRooms = async (req: Request, res: Response) => {
   try {
-    const { pgId } = req.params;
+    const pgId = (req as any).pg?.id || req.params.pgId;
     const rooms = await prisma.room.findMany({
       where: { pgId: pgId as string, isActive: true },
       include: {
@@ -133,11 +133,12 @@ export const getPGRooms = async (req: Request, res: Response) => {
 
 export const payRent = async (req: Request, res: Response) => {
   try {
-    const { pgId, tenantId } = req.params;
-    const { method, amount, invoiceId } = req.body;
+    const pgId = (req as any).pg?.id || req.params.pgId;
+    const { tenantId } = req.params;
+    const { amount, paidAt, paymentMode, referenceId, invoiceId } = req.body;
     const actorId = (req as any).auth?.userId || 'system';
 
-    if (!method || (method !== 'upi' && method !== 'cash')) {
+    if (!paymentMode || (paymentMode !== 'upi' && paymentMode !== 'cash')) {
       return res.status(400).json({ error: 'Valid payment method (upi/cash) is required.' });
     }
 
@@ -146,7 +147,7 @@ export const payRent = async (req: Request, res: Response) => {
     const updatedInvoice = await PayRentWorkflow.execute(
       pgId as string, 
       tenantId as string, 
-      method, 
+      paymentMode, 
       actorId, 
       parsedAmount,
       invoiceId as string | undefined
@@ -162,7 +163,7 @@ export const payRent = async (req: Request, res: Response) => {
  */
 export const createComplaint = async (req: Request, res: Response) => {
   try {
-    const { pgId } = req.params;
+    const pgId = (req as any).pg?.id || req.params.pgId;
     const { roomOrArea, description, priority, category } = req.body;
     const actorId = (req as any).auth?.userId || 'system';
 
@@ -190,7 +191,8 @@ export const createComplaint = async (req: Request, res: Response) => {
  */
 export const resolveComplaint = async (req: Request, res: Response) => {
   try {
-    const { pgId, complaintId } = req.params;
+    const pgId = (req as any).pg?.id || req.params.pgId;
+    const { complaintId } = req.params;
     const actorId = (req as any).auth?.userId || 'system';
 
     const updatedComplaint = await ResolveComplaintWorkflow.execute(pgId as string, complaintId as string, actorId);
@@ -205,7 +207,7 @@ export const resolveComplaint = async (req: Request, res: Response) => {
  */
 export const getPGComplaints = async (req: Request, res: Response) => {
   try {
-    const { pgId } = req.params;
+    const pgId = (req as any).pg?.id || req.params.pgId;
     const complaints = await prisma.complaint.findMany({
       where: { pgId: pgId as string, isActive: true },
       include: {
@@ -247,7 +249,8 @@ export const getPGComplaints = async (req: Request, res: Response) => {
  */
 export const getPGComplaint = async (req: Request, res: Response) => {
   try {
-    const { pgId, complaintId } = req.params;
+    const pgId = (req as any).pg?.id || req.params.pgId;
+    const { complaintId } = req.params;
     const complaint = await prisma.complaint.findFirst({
       where: { id: complaintId as string, pgId: pgId as string, isActive: true },
       include: {
@@ -291,7 +294,8 @@ export const getPGComplaint = async (req: Request, res: Response) => {
  * Fetches comprehensive room operational history ledger (beds, current/past occupants, invoices, complaints, operational timeline, and revenue stats).
  */
 export const getRoomHistory = async (req: Request, res: Response) => {
-  const { pgId, roomId } = req.params;
+  const pgId = (req as any).pg?.id || req.params.pgId;
+  const { roomId } = req.params;
   console.log("pgId", pgId);
   console.log("roomId", roomId);
 
@@ -517,7 +521,7 @@ export const scanOverdueManual = async (req: Request, res: Response) => {
  */
 export const getOverdueResidentsManual = async (req: Request, res: Response) => {
   try {
-    const { pgId } = req.params;
+    const pgId = (req as any).pg?.id || req.params.pgId;
     const { filter } = req.query;
     // Aligned with the expanded Zustand sheet states
     let statusFilter: InvoiceStatus[] = [InvoiceStatus.PAST_DUE];
@@ -624,7 +628,8 @@ export const sendReminderManual = async (req: Request, res: Response) => {
  */
 export const saveTenantNoteManual = async (req: Request, res: Response) => {
   try {
-    const { pgId, tenantId } = req.params;
+    const pgId = (req as any).pg?.id || req.params.pgId;
+    const { tenantId } = req.params;
     const { note } = req.body;
     const actorId = (req as any).auth?.userId || 'system-manual';
 

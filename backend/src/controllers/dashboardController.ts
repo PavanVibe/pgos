@@ -4,7 +4,7 @@ import { getPGDashboardSummary } from '../services/dashboardService';
 export const getDashboardSummary = async (req: Request, res: Response) => {
   try {
     const org = (req as any).organization;
-    const { pgId } = req.params;
+    const pgId = (req as any).pg?.id || req.params.pgId;
 
     const summary = await getPGDashboardSummary(pgId as string, org.id);
 

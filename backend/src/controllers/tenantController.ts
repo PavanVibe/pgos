@@ -41,7 +41,7 @@ const onboardSchema = z.object({
 
 export const onboard = async (req: Request, res: Response) => {
   try {
-    const { pgId } = req.params;
+    const pgId = (req as any).pg?.id || req.params.pgId;
     const actorId = (req as any).auth?.userId || 'system';
     const payload = onboardSchema.parse(req.body);
 
@@ -132,7 +132,8 @@ export const lockBedForOnboarding = async (req: Request, res: Response) => {
 
 export const vacate = async (req: Request, res: Response) => {
   try {
-    const { pgId, tenantId } = req.params;
+    const pgId = (req as any).pg?.id || req.params.pgId;
+    const { tenantId } = req.params;
     const actorId = (req as any).auth?.userId || 'system';
 
     const profile = await VacateResidentWorkflow.execute(pgId as string, tenantId as string, actorId);
