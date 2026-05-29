@@ -152,6 +152,7 @@ model PGTenantProfile {
   historicalRoomNumber String?
   historicalBedNumber  String?
   status               TenantStatus   @default(ACTIVE)
+  monthlyRent          Float          @default(0)
   securityDeposit      Float          @default(0)
   moveInDate           DateTime       @default(now())
   moveOutDate          DateTime?

@@ -170,6 +170,7 @@ export class OnboardResidentWorkflow {
             historicalRoomNumber: bed.room.number,
             historicalBedNumber: bed.bedNumber,
             status: isQuickAdd ? TenantStatus.INCOMPLETE : TenantStatus.ACTIVE,
+            monthlyRent,
             securityDeposit,
             moveInDate,
             createdBy: actorId,

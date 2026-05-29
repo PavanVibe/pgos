@@ -40,13 +40,13 @@ export default function VacateResidentSheet({ pgId }: { pgId: string }) {
   if (roomsResponse?.data) {
     roomsResponse.data.forEach((room: any) => {
       room.beds.forEach((bed: any) => {
-        if (bed.tenantProfile && bed.tenantProfile.status === 'ACTIVE') {
+        if (bed.tenantProfile && (bed.tenantProfile.status === 'ACTIVE' || bed.tenantProfile.status === 'NOTICE' || bed.tenantProfile.status === 'INCOMPLETE')) {
           activeResidents.push({
             id: bed.tenantProfile.id,
             name: bed.tenantProfile.globalTenant?.name || 'Active Resident',
             roomNumber: room.number,
             bedNumber: bed.bedNumber,
-            securityDeposit: bed.tenantProfile.securityDeposit || bed.monthlyRent * 2 || 6000,
+            securityDeposit: bed.tenantProfile.securityDeposit || bed.tenantProfile.monthlyRent * 2 || bed.monthlyRent * 2 || 6000,
           });
         }
       });
@@ -236,7 +236,7 @@ export default function VacateResidentSheet({ pgId }: { pgId: string }) {
                 </div>
               ) : (
                 /* DISPLAY MODE (Selected Resident Card) */
-                activeResident && (
+                activeResident ? (
                   <div className="space-y-1 bg-zinc-900/30 border border-zinc-800 p-4 rounded-xl flex items-center justify-between shadow-sm">
                     <div>
                       <span className="text-xs uppercase tracking-wider font-semibold text-zinc-500">Selected Resident</span>
@@ -257,6 +257,10 @@ export default function VacateResidentSheet({ pgId }: { pgId: string }) {
                         Change
                       </Button>
                     )}
+                  </div>
+                ) : (
+                  <div className="p-4 bg-zinc-900/10 border border-dashed border-zinc-850 rounded-xl text-center text-xs text-zinc-500">
+                    Resolving resident profile details...
                   </div>
                 )
               )}

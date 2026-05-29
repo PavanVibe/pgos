@@ -90,6 +90,7 @@ export const getPGRooms = async (req: Request, res: Response) => {
               select: {
                 id: true,
                 status: true,
+                monthlyRent: true,
                 securityDeposit: true,
                 moveInDate: true,
                 globalTenant: {
@@ -308,6 +309,7 @@ export const getRoomHistory = async (req: Request, res: Response) => {
               select: {
                 id: true,
                 status: true,
+                monthlyRent: true,
                 securityDeposit: true,
                 moveInDate: true,
                 globalTenant: {

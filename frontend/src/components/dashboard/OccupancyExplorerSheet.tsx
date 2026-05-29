@@ -34,6 +34,7 @@ interface Bed {
   tenantProfile: {
     id: string;
     status: string;
+    monthlyRent: number;
     securityDeposit: number;
     moveInDate: string;
     globalTenant?: {
@@ -420,7 +421,7 @@ export default function OccupancyExplorerSheet({ pgId }: { pgId: string }) {
                           <DollarSign className="h-4 w-4 text-zinc-500" />
                           <div className="w-1/2">
                             <p className="text-[10px] text-zinc-500 uppercase tracking-wide">Rent Amount</p>
-                            <p className="text-zinc-200 font-bold mt-0.5">₹{bed.monthlyRent}</p>
+                            <p className="text-zinc-200 font-bold mt-0.5">₹{bed.tenantProfile.monthlyRent || bed.monthlyRent}</p>
                           </div>
                           <div className="w-1/2 border-l border-zinc-900 pl-4">
                             <p className="text-[10px] text-zinc-500 uppercase tracking-wide">Deposit Paid</p>

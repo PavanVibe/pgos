@@ -55,6 +55,7 @@ interface PGTenantProfile {
   id: string;
   bedId: string | null;
   status: string;
+  monthlyRent: number;
   securityDeposit: number;
   moveInDate: string;
   moveOutDate: string | null;
@@ -326,7 +327,7 @@ export function RoomHistoryDrawer({ pgId }: { pgId: string }) {
                               </div>
                               <div>
                                 <span className="text-[10px] text-zinc-500 block uppercase">Monthly Rent</span>
-                                <span className="text-zinc-200">₹{bed.monthlyRent}</span>
+                                <span className="text-zinc-200">₹{activeProfile.monthlyRent || bed.monthlyRent}</span>
                               </div>
                               <div>
                                 <span className="text-[10px] text-zinc-500 block uppercase">Deposit Paid</span>
@@ -339,7 +340,7 @@ export function RoomHistoryDrawer({ pgId }: { pgId: string }) {
                                 <Button 
                                   onClick={() => { 
                                     const unpaidInv = activeProfile.invoices.find(inv => inv.status !== 'PAID');
-                                    const unpaidAmount = unpaidInv ? unpaidInv.amount : bed.monthlyRent;
+                                    const unpaidAmount = unpaidInv ? unpaidInv.amount : (activeProfile.monthlyRent || bed.monthlyRent);
                                     const unpaidInvId = unpaidInv ? unpaidInv.id : undefined;
                                     const unpaidInvDueDate = unpaidInv ? unpaidInv.dueDate : undefined;
                                     openMarkPaid(
