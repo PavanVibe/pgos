@@ -200,11 +200,11 @@ export function ReviewConfirmation() {
             <div className="space-y-2">
               <div className="flex items-center gap-2 text-amber-500 font-extrabold uppercase tracking-wide text-xs">
                 <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
-                Existing Resident Found
+                Resident Found In Historical Records
               </div>
-              <h4 className="text-xl font-black text-white">Verify Resident Re-use</h4>
-              <p className="text-zinc-400 text-xs leading-relaxed">
-                The email address you entered belongs to an existing resident in the system.
+              <h4 className="text-xl font-black text-white">Historical Profile Found</h4>
+              <p className="text-zinc-400 text-xs leading-relaxed font-semibold">
+                This resident has previously stayed in this PG.
               </p>
             </div>
 
@@ -221,8 +221,8 @@ export function ReviewConfirmation() {
                 <span className="text-zinc-500 font-medium">Email:</span>
                 <span className="font-extrabold text-zinc-200">{residentDetails?.email}</span>
               </div>
-              <div className="text-amber-500 font-semibold text-[11px] pt-1 text-center">
-                This email already exists. Choose an action:
+              <div className="text-amber-500 font-semibold text-[11px] pt-1 text-center leading-normal">
+                Would you like to create a new stay using the existing profile?
               </div>
             </div>
 
