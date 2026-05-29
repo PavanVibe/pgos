@@ -135,8 +135,14 @@ export const payRent = async (req: Request, res: Response) => {
   try {
     const pgId = (req as any).pg?.id || req.params.pgId;
     const { tenantId } = req.params;
-    const { amount, paidAt, paymentMode, referenceId, invoiceId } = req.body;
+    const { amount, paidAt, referenceId, invoiceId } = req.body;
     const actorId = (req as any).auth?.userId || 'system';
+
+    let paymentMode = req.body.paymentMode;
+    if (req.body.method && !req.body.paymentMode) {
+      console.warn(`[Deprecation Warning] Deprecated payment payload key "method" detected from actor ${actorId}. Use "paymentMode" instead.`);
+      paymentMode = req.body.method;
+    }
 
     if (!paymentMode || (paymentMode !== 'upi' && paymentMode !== 'cash')) {
       return res.status(400).json({ error: 'Valid payment method (upi/cash) is required.' });
