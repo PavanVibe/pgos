@@ -259,7 +259,10 @@ export default function OverdueResidentSheet({ pgId }: { pgId: string }) {
                       <div className="space-y-0.5">
                         <div className="flex items-center gap-2">
                           <button
-                            onClick={() => openProfile(res.tenantProfileId)}
+                            onClick={() => {
+                              console.log("[DIAGNOSTIC] Overdue collection tenant clicked in OverdueResidentSheet for profileId:", res.tenantProfileId);
+                              openProfile(res.tenantProfileId);
+                            }}
                             className="font-extrabold text-sm text-zinc-100 hover:text-primary hover:underline transition-colors text-left flex items-center gap-1 group/name cursor-pointer"
                           >
                             {res.tenantName}

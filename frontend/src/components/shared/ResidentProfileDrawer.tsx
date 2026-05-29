@@ -8,16 +8,31 @@ import {
   User, Phone, Mail, Calendar, CreditCard, AlertCircle, Clock, ShieldCheck, 
   MapPin, DollarSign, ListTodo, ClipboardList, ExternalLink, X, Download
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 
 export default function ResidentProfileDrawer() {
   const { isOpen, selectedProfileId, closeProfile } = useResidentProfileStore();
   const [fullscreenImage, setFullscreenImage] = useState<string | null>(null);
 
+  // 1. Drawer mount diagnostic log
+  useEffect(() => {
+    console.log("[DIAGNOSTIC] ResidentProfileDrawer component mounted.");
+  }, []);
+
+  // 2. State change diagnostic log
+  useEffect(() => {
+    console.log(`[DIAGNOSTIC] ResidentProfileDrawer Open State: ${isOpen}, Selected ID: ${selectedProfileId}`);
+  }, [isOpen, selectedProfileId]);
+
   const { data: response, isLoading, isError } = useQuery({
     queryKey: ['residents', 'profile', selectedProfileId],
-    queryFn: () => fetchApi(`/tenants/profiles/${selectedProfileId}`),
+    queryFn: async () => {
+      console.log(`[DIAGNOSTIC] ResidentProfileDrawer API Fetch initiated for profileId: ${selectedProfileId}`);
+      const res = await fetchApi(`/tenants/profiles/${selectedProfileId}`);
+      console.log("[DIAGNOSTIC] ResidentProfileDrawer API Response received:", res);
+      return res;
+    },
     enabled: !!selectedProfileId && isOpen,
   });
 
@@ -69,10 +84,12 @@ export default function ResidentProfileDrawer() {
 
   const complaints = profile?.complaints || [];
 
+  console.log(`[DIAGNOSTIC] ResidentProfileDrawer render start. is_open: ${isOpen}, is_loading: ${isLoading}, has_profile: ${!!profile}`);
+
   return (
     <>
       <Sheet open={isOpen} onOpenChange={(open) => !open && closeProfile()}>
-        <SheetContent className="w-full sm:max-w-2xl bg-black text-white border-zinc-900 flex flex-col p-0 overflow-y-auto h-full z-40">
+        <SheetContent className="w-full sm:max-w-2xl bg-black text-white border-zinc-900 flex flex-col p-0 overflow-y-auto h-full">
           {isLoading && (
             <div className="flex-1 flex flex-col items-center justify-center space-y-4 p-8">
               <div className="h-10 w-10 border-4 border-primary border-t-transparent rounded-full animate-spin" />

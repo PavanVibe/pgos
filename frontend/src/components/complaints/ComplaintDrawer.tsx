@@ -138,7 +138,10 @@ export default function ComplaintDrawer() {
                       <div>
                         {complaint.tenantProfile?.id ? (
                           <button
-                            onClick={() => openProfile(complaint.tenantProfile.id)}
+                            onClick={() => {
+                              console.log("[DIAGNOSTIC] Complaint tenant clicked in ComplaintDrawer for profileId:", complaint.tenantProfile.id);
+                              openProfile(complaint.tenantProfile.id);
+                            }}
                             className="font-extrabold text-white hover:text-primary hover:underline transition-colors text-left flex items-center gap-1 group/name cursor-pointer font-sans"
                           >
                             {complaint.tenantProfile.globalTenant?.name || 'Active Resident'}

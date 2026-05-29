@@ -318,8 +318,11 @@ export function RoomHistoryDrawer({ pgId }: { pgId: string }) {
                             <div className="grid grid-cols-2 gap-4 text-xs font-semibold">
                               <div>
                                 <span className="text-[10px] text-zinc-500 block uppercase">Resident</span>
-                                <button
-                                  onClick={() => openProfile(activeProfile.id)}
+                                 <button
+                                  onClick={() => {
+                                    console.log("[DIAGNOSTIC] Active resident clicked in RoomHistoryDrawer for profileId:", activeProfile.id);
+                                    openProfile(activeProfile.id);
+                                  }}
                                   className="font-extrabold text-sm text-white mt-1.5 flex items-center gap-1.5 hover:text-primary transition-all text-left group"
                                   title="Click to view resident stay profile ledger"
                                 >
@@ -409,7 +412,10 @@ export function RoomHistoryDrawer({ pgId }: { pgId: string }) {
                         <div className="flex justify-between items-start">
                           <div>
                             <button
-                              onClick={() => openProfile(pastProfile.id)}
+                              onClick={() => {
+                                console.log("[DIAGNOSTIC] Past historical occupant clicked in RoomHistoryDrawer for profileId:", pastProfile.id);
+                                openProfile(pastProfile.id);
+                              }}
                               className="font-extrabold text-sm text-white hover:text-primary transition-all text-left flex items-center gap-1.5 group"
                               title="Click to view resident stay profile ledger"
                             >

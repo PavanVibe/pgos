@@ -351,8 +351,11 @@ export default function OccupancyExplorerSheet({ pgId }: { pgId: string }) {
                         
                         <h4 className="text-xl font-bold text-white mt-3 flex items-center justify-between">
                           <span>{bed.tenantProfile.globalTenant?.name || 'Active Resident'}</span>
-                          <button
-                            onClick={() => openProfile(bed.tenantProfile!.id)}
+                           <button
+                            onClick={() => {
+                              console.log("[DIAGNOSTIC] View Profile clicked in OccupancyExplorerSheet for profileId:", bed.tenantProfile!.id);
+                              openProfile(bed.tenantProfile!.id);
+                            }}
                             className="text-[10px] bg-zinc-900 border border-zinc-800 hover:text-white px-3 py-1.5 rounded-lg flex items-center gap-1 cursor-pointer font-bold select-none uppercase tracking-wide transition-all shrink-0"
                           >
                             <ExternalLink className="h-3 w-3" /> View Profile
