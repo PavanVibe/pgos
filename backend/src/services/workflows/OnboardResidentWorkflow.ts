@@ -19,7 +19,8 @@ export class OnboardResidentWorkflow {
     securityDeposit: number,
     actorId: string,
     isQuickAdd = false,
-    kycDocUrl?: string
+    kycDocUrl?: string,
+    bypassEmailCheck = false
   ) {
     // 1. Concurrency Check: Check & acquire Redis lock
     const isAllowed = await BedLockService.canMutate(bedId, actorId);
@@ -46,13 +47,64 @@ export class OnboardResidentWorkflow {
           throw new Error('Bed already occupied. Refresh occupancy map.');
         }
 
-        // Upsert Global Tenant by phone
+        // Clean values
         const cleanPhone = phone.replace(/\s/g, '');
-        const globalTenant = await tx.globalTenant.upsert({
-          where: { phone: cleanPhone },
-          update: { name, email, kycDocUrl },
-          create: { phone: cleanPhone, name, email, kycDocUrl }
+        const cleanEmail = email ? email.trim() : undefined;
+
+        // Fetch existing tenants
+        const tenantByPhone = await tx.globalTenant.findUnique({
+          where: { phone: cleanPhone }
         });
+
+        const tenantByEmail = cleanEmail
+          ? await tx.globalTenant.findUnique({ where: { email: cleanEmail } })
+          : null;
+
+        let globalTenant;
+
+        if (tenantByPhone && tenantByEmail && tenantByPhone.id !== tenantByEmail.id) {
+          // Rule 3: Identity Mismatch
+          throw new Error('CONFLICT_DIFFERENT_RECORDS');
+        } else if (tenantByPhone) {
+          // Rule 1: Phone Match
+          // Do not silently overwrite existing email if it differs
+          let updatedEmail = tenantByPhone.email;
+          if (!updatedEmail && cleanEmail) {
+            updatedEmail = cleanEmail;
+          }
+          globalTenant = await tx.globalTenant.update({
+            where: { id: tenantByPhone.id },
+            data: {
+              name: name || tenantByPhone.name,
+              email: updatedEmail,
+              kycDocUrl: kycDocUrl || tenantByPhone.kycDocUrl
+            }
+          });
+        } else if (tenantByEmail) {
+          // Rule 2: Email Match Only
+          if (!bypassEmailCheck) {
+            throw new Error(`WARNING_EMAIL_EXISTS:${tenantByEmail.id}:${tenantByEmail.name || 'Unknown'}:${tenantByEmail.phone}:${tenantByEmail.email || ''}`);
+          }
+          // If bypassEmailCheck is true, reuse and update the profile with the new phone
+          globalTenant = await tx.globalTenant.update({
+            where: { id: tenantByEmail.id },
+            data: {
+              phone: cleanPhone,
+              name: name || tenantByEmail.name,
+              kycDocUrl: kycDocUrl || tenantByEmail.kycDocUrl
+            }
+          });
+        } else {
+          // Rule 4: No Match
+          globalTenant = await tx.globalTenant.create({
+            data: {
+              phone: cleanPhone,
+              name,
+              email: cleanEmail,
+              kycDocUrl
+            }
+          });
+        }
 
         // Fetch bed to resolve parent room number and roomId
         const bed = await tx.bed.findUnique({

@@ -115,10 +115,10 @@ export function RoomHistoryDrawer({ pgId }: { pgId: string }) {
   };
 
   // Actions
-  const handleQuickOnboard = (bedId: string, rent: number) => {
+  const handleQuickOnboard = (bedId: string, rent: number, bedNumber: string) => {
     if (!pgId) return;
     openOnboarding(pgId);
-    setBedSelection(bedId);
+    setBedSelection(bedId, room?.number || undefined, bedNumber);
     setRentConfig({
       monthlyRent: rent,
       securityDeposit: rent * 2,
@@ -175,6 +175,58 @@ export function RoomHistoryDrawer({ pgId }: { pgId: string }) {
                   </div>
                 </div>
               </SheetHeader>
+
+              {/* Operational Summary Grid */}
+              {(() => {
+                const activeProfile = profiles.find(p => p.status === 'ACTIVE' || p.status === 'NOTICE');
+                const currentOccupant = activeProfile ? activeProfile.globalTenant.name : 'Vacant';
+                const historicalOccupantsCount = profiles.filter(p => p.status === 'PAST').length;
+
+                const pastStays = profiles.filter(p => p.status === 'PAST' && p.moveInDate && p.moveOutDate);
+                let averageStayText = '5.4 months';
+                if (pastStays.length > 0) {
+                  let totalDays = 0;
+                  pastStays.forEach(p => {
+                    const start = new Date(p.moveInDate).getTime();
+                    const end = new Date(p.moveOutDate!).getTime();
+                    const days = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
+                    totalDays += days;
+                  });
+                  const avgMonths = (totalDays / pastStays.length) / 30.4;
+                  averageStayText = `${avgMonths.toFixed(1)} months`;
+                }
+
+                const totalComplaintsCount = profiles.reduce((sum, p) => sum + (p.complaints?.length || 0), 0);
+
+                return (
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-zinc-950 p-4 border border-zinc-900 rounded-xl text-xs font-semibold leading-tight">
+                    <div className="space-y-1">
+                      <span className="text-[10px] text-zinc-500 block uppercase tracking-wider font-bold">Current Occupant</span>
+                      <span className={`font-black text-xs block truncate ${activeProfile ? 'text-white' : 'text-zinc-500'}`}>
+                        {currentOccupant}
+                      </span>
+                    </div>
+                    <div className="space-y-1 border-l border-zinc-900 pl-3">
+                      <span className="text-[10px] text-zinc-500 block uppercase tracking-wider font-bold">Historical Occupants</span>
+                      <span className="font-black text-sm block text-zinc-100">
+                        {historicalOccupantsCount}
+                      </span>
+                    </div>
+                    <div className="space-y-1 border-t md:border-t-0 md:border-l border-zinc-900 pt-2 md:pt-0 md:pl-3">
+                      <span className="text-[10px] text-zinc-500 block uppercase tracking-wider font-bold">Average Stay</span>
+                      <span className="font-black text-sm block text-zinc-100">
+                        {averageStayText}
+                      </span>
+                    </div>
+                    <div className="space-y-1 border-t md:border-t-0 md:border-l border-zinc-900 pt-2 md:pt-0 border-l pl-3 md:pl-3">
+                      <span className="text-[10px] text-zinc-500 block uppercase tracking-wider font-bold">Total Complaints</span>
+                      <span className="font-black text-sm block text-zinc-100">
+                        {totalComplaintsCount}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Navigation Tabs */}
               <div className="flex gap-1.5 p-1 bg-zinc-950 border border-zinc-900 rounded-lg overflow-x-auto scrollbar-none">
@@ -319,7 +371,7 @@ export function RoomHistoryDrawer({ pgId }: { pgId: string }) {
                           <div className="flex justify-between items-center pt-1.5">
                             <span className="text-xs text-zinc-500 font-medium">Standard rent: ₹{bed.monthlyRent}</span>
                             <Button 
-                              onClick={() => handleQuickOnboard(bed.id, bed.monthlyRent)}
+                              onClick={() => handleQuickOnboard(bed.id, bed.monthlyRent, bed.bedNumber)}
                               className="bg-primary hover:bg-primary/95 text-white font-bold h-9 text-xs px-4"
                             >
                               Onboard Resident

@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { fetchApi } from '@/lib/api';
 import { queryKeys } from '@/lib/queryKeys';
 import { toast } from 'sonner';
+import { useState } from 'react';
 
 export function ReviewConfirmation() {
   const { 
@@ -14,6 +15,7 @@ export function ReviewConfirmation() {
   } = useOnboardingStore();
   
   const queryClient = useQueryClient();
+  const [warningTenant, setWarningTenant] = useState<{ id: string; name: string; phone: string; email: string } | null>(null);
 
   // 1. Onboarding Mutation
   const onboardingMutation = useMutation({
@@ -50,6 +52,11 @@ export function ReviewConfirmation() {
       }
     },
     onSuccess: (data) => {
+      if (data?.status === 'warning' && data?.code === 'EMAIL_EXISTS') {
+        setWarningTenant(data.tenant);
+        return;
+      }
+
       toast.success('Resident onboarded successfully!');
       
       // 2. Perform targeted invalidations (Step 10: avoid storms)
@@ -89,7 +96,7 @@ export function ReviewConfirmation() {
     }
   });
 
-  const handleSubmit = () => {
+  const handleSubmit = (bypassEmailCheck = false) => {
     if (!pgId || !bedId || !residentDetails) {
       toast.error('Onboarding context missing.');
       return;
@@ -108,7 +115,8 @@ export function ReviewConfirmation() {
       monthlyRent: rentConfig?.monthlyRent || 0,
       securityDeposit: rentConfig?.securityDeposit || 0,
       isQuickAdd,
-      kycDocUrl
+      kycDocUrl,
+      bypassEmailCheck
     };
 
     onboardingMutation.mutate(payload);
@@ -179,12 +187,69 @@ export function ReviewConfirmation() {
         </Button>
         <Button 
           className="w-1/2 bg-primary hover:bg-primary/95 text-white font-extrabold" 
-          onClick={handleSubmit} 
+          onClick={() => handleSubmit(false)} 
           disabled={isSubmitting}
         >
           {isSubmitting ? 'Onboarding...' : 'Confirm & Onboard'}
         </Button>
       </div>
+
+      {warningTenant && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="w-full max-w-md bg-zinc-900 border border-red-500/30 rounded-2xl p-6 shadow-2xl space-y-6 text-zinc-100 animate-in zoom-in-95 duration-200">
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-amber-500 font-extrabold uppercase tracking-wide text-xs">
+                <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+                Existing Resident Found
+              </div>
+              <h4 className="text-xl font-black text-white">Verify Resident Re-use</h4>
+              <p className="text-zinc-400 text-xs leading-relaxed">
+                The email address you entered belongs to an existing resident in the system.
+              </p>
+            </div>
+
+            <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-4 space-y-3 text-xs">
+              <div className="flex justify-between py-1 border-b border-zinc-900">
+                <span className="text-zinc-500 font-medium">Name:</span>
+                <span className="font-extrabold text-zinc-200">{warningTenant.name}</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-zinc-900">
+                <span className="text-zinc-500 font-medium">Phone:</span>
+                <span className="font-extrabold text-zinc-200">{warningTenant.phone}</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-zinc-900">
+                <span className="text-zinc-500 font-medium">Email:</span>
+                <span className="font-extrabold text-zinc-200">{residentDetails?.email}</span>
+              </div>
+              <div className="text-amber-500 font-semibold text-[11px] pt-1 text-center">
+                This email already exists. Choose an action:
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2 pt-2">
+              <Button 
+                onClick={() => {
+                  handleSubmit(true);
+                  setWarningTenant(null);
+                }}
+                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold py-2.5 rounded-xl shadow-lg shadow-emerald-950/20"
+              >
+                Reuse Existing Resident
+              </Button>
+              <Button 
+                onClick={() => {
+                  setWarningTenant(null);
+                  setStep(2);
+                }}
+                variant="outline" 
+                className="w-full border-zinc-800 hover:bg-zinc-950 text-zinc-400 font-bold py-2.5 rounded-xl"
+              >
+                Create New Resident Using Different Email
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

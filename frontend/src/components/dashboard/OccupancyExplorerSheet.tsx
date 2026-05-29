@@ -120,8 +120,9 @@ export default function OccupancyExplorerSheet({ pgId }: { pgId: string }) {
   // Quick onboarding action
   const handleQuickOnboard = (bed: Bed) => {
     if (!pgId) return;
+    const room = rooms.find((r) => r.beds.some((b) => b.id === bed.id));
     openOnboarding(pgId);
-    setBedSelection(bed.id);
+    setBedSelection(bed.id, room?.number || undefined, bed.bedNumber);
     setRentConfig({
       monthlyRent: bed.monthlyRent,
       securityDeposit: bed.monthlyRent * 2,
