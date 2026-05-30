@@ -19,6 +19,7 @@ export declare class PayRentWorkflow {
         paidAt: Date | null;
         paymentMode: string | null;
         referenceId: string | null;
+        type: string;
     }>;
 }
 //# sourceMappingURL=PayRentWorkflow.d.ts.map

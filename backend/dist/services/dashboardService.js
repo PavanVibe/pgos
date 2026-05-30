@@ -30,7 +30,8 @@ const getPGDashboardSummary = async (pgId, orgId) => {
             where: {
                 tenantProfile: { pgId },
                 status: { in: ['PENDING', 'PAST_DUE'] },
-                isActive: true
+                isActive: true,
+                type: 'RENT'
             },
             _sum: { amount: true }
         }),
@@ -61,7 +62,8 @@ const getPGDashboardSummary = async (pgId, orgId) => {
             where: {
                 tenantProfile: { pgId },
                 status: 'PAST_DUE',
-                isActive: true
+                isActive: true,
+                type: 'RENT'
             }
         }),
         // Unpaid Invoices Count
@@ -69,7 +71,8 @@ const getPGDashboardSummary = async (pgId, orgId) => {
             where: {
                 tenantProfile: { pgId },
                 status: { in: ['PENDING', 'PAST_DUE'] },
-                isActive: true
+                isActive: true,
+                type: 'RENT'
             }
         }),
         // Overdue Invoices Sum
@@ -77,7 +80,8 @@ const getPGDashboardSummary = async (pgId, orgId) => {
             where: {
                 tenantProfile: { pgId },
                 status: 'PAST_DUE',
-                isActive: true
+                isActive: true,
+                type: 'RENT'
             },
             _sum: { amount: true }
         })
@@ -103,7 +107,8 @@ const getPGDashboardSummary = async (pgId, orgId) => {
             tenantProfile: { pgId },
             status: 'PAID',
             paidAt: { gte: startOfCurrentMonth },
-            isActive: true
+            isActive: true,
+            type: 'RENT'
         },
         _sum: { amount: true }
     });
@@ -115,7 +120,8 @@ const getPGDashboardSummary = async (pgId, orgId) => {
             tenantProfile: { pgId },
             status: 'PAID',
             paidAt: { gte: startOfCurrentMonth },
-            isActive: true
+            isActive: true,
+            type: 'RENT'
         }
     });
     const payingResidentsCount = payingResidentsGroup.length;
@@ -130,7 +136,8 @@ const getPGDashboardSummary = async (pgId, orgId) => {
                 gte: startOfLastMonth,
                 lte: endOfLastMonth
             },
-            isActive: true
+            isActive: true,
+            type: 'RENT'
         },
         _sum: { amount: true }
     });

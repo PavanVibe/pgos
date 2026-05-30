@@ -21,7 +21,10 @@ export class OnboardResidentWorkflow {
     isQuickAdd = false,
     kycDocUrl?: string,
     bypassEmailCheck = false,
-    transferResident = false
+    transferResident = false,
+    depositCollected = false,
+    depositPaymentMode?: string,
+    depositCollectedAt?: Date
   ) {
     // 1. Concurrency Check: Check & acquire Redis lock
     const isAllowed = await BedLockService.canMutate(bedId, actorId);
@@ -172,20 +175,36 @@ export class OnboardResidentWorkflow {
             status: isQuickAdd ? TenantStatus.INCOMPLETE : TenantStatus.ACTIVE,
             monthlyRent,
             securityDeposit,
-            moveInDate,
+            securityDepositStatus: depositCollected ? 'COLLECTED' : 'PENDING',
+            depositCollectedAt: depositCollected ? (depositCollectedAt || new Date()) : null,
             createdBy: actorId,
             updatedBy: actorId,
           }
         });
 
-        // Create initial Rent Invoice
-        const invoiceAmount = monthlyRent + securityDeposit;
+        // 1. Create first month's Rent Invoice
         await tx.rentInvoice.create({
           data: {
             pgTenantId: profile.id,
-            amount: invoiceAmount,
-            dueDate: new Date(), // Due immediately
+            amount: monthlyRent,
+            dueDate: moveInDate,
             status: InvoiceStatus.PENDING,
+            type: 'RENT',
+            createdBy: actorId,
+            updatedBy: actorId,
+          }
+        });
+
+        // 2. Create Security Deposit Invoice
+        await tx.rentInvoice.create({
+          data: {
+            pgTenantId: profile.id,
+            amount: securityDeposit,
+            dueDate: moveInDate,
+            status: depositCollected ? InvoiceStatus.PAID : InvoiceStatus.PENDING,
+            paidAt: depositCollected ? (depositCollectedAt || new Date()) : null,
+            paymentMode: depositCollected ? (depositPaymentMode || 'CASH') : null,
+            type: 'SECURITY_DEPOSIT',
             createdBy: actorId,
             updatedBy: actorId,
           }

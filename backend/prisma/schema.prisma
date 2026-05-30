@@ -154,6 +154,11 @@ model PGTenantProfile {
   status               TenantStatus   @default(ACTIVE)
   monthlyRent          Float          @default(0)
   securityDeposit      Float          @default(0)
+  securityDepositStatus String         @default("PENDING")
+  depositCollectedAt    DateTime?
+  depositRefundedAmount Float?
+  depositRefundedAt     DateTime?
+  depositRefundMode     String?
   moveInDate           DateTime       @default(now())
   moveOutDate          DateTime?
   
@@ -190,6 +195,7 @@ model RentInvoice {
   paidAt        DateTime?
   paymentMode   String?
   referenceId   String?
+  type          String          @default("RENT")
   
   createdBy     String?
   updatedBy     String?

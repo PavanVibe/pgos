@@ -13,7 +13,10 @@ export const onboardResident = async (
   monthlyRent: number,
   securityDeposit: number,
   actorId: string,
-  isQuickAdd: boolean = false
+  isQuickAdd: boolean = false,
+  depositCollected: boolean = false,
+  depositPaymentMode?: string,
+  depositCollectedAt?: Date
 ) => {
   // 1. Check Redis Lock
   const isAllowed = await canAllocateBed(bedId, actorId);
@@ -58,20 +61,37 @@ export const onboardResident = async (
         historicalBedNumber: bed.bedNumber,
         status: isQuickAdd ? TenantStatus.INCOMPLETE : TenantStatus.ACTIVE,
         securityDeposit,
+        securityDepositStatus: depositCollected ? 'COLLECTED' : 'PENDING',
+        depositCollectedAt: depositCollected ? (depositCollectedAt || new Date()) : null,
         moveInDate,
         createdBy: actorId,
         updatedBy: actorId,
       }
     });
 
-    // Create Rent Invoice for first month
-    const invoiceAmount = monthlyRent + securityDeposit;
+    // 1. Create first month's Rent Invoice
     await tx.rentInvoice.create({
       data: {
         pgTenantId: profile.id,
-        amount: invoiceAmount,
-        dueDate: new Date(), // Due immediately
+        amount: monthlyRent,
+        dueDate: moveInDate,
         status: InvoiceStatus.PENDING,
+        type: 'RENT',
+        createdBy: actorId,
+        updatedBy: actorId,
+      }
+    });
+
+    // 2. Create Security Deposit Invoice
+    await tx.rentInvoice.create({
+      data: {
+        pgTenantId: profile.id,
+        amount: securityDeposit,
+        dueDate: moveInDate,
+        status: depositCollected ? InvoiceStatus.PAID : InvoiceStatus.PENDING,
+        paidAt: depositCollected ? (depositCollectedAt || new Date()) : null,
+        paymentMode: depositCollected ? (depositPaymentMode || 'CASH') : null,
+        type: 'SECURITY_DEPOSIT',
         createdBy: actorId,
         updatedBy: actorId,
       }

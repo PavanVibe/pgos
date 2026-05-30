@@ -15,6 +15,11 @@ export declare const allocateBed: (bedId: string, globalTenantId: string, pgId: 
     historicalBedNumber: string | null;
     status: import(".prisma/client").$Enums.TenantStatus;
     securityDeposit: number;
+    securityDepositStatus: string;
+    depositCollectedAt: Date | null;
+    depositRefundedAmount: number | null;
+    depositRefundedAt: Date | null;
+    depositRefundMode: string | null;
     moveInDate: Date;
     moveOutDate: Date | null;
 }>;

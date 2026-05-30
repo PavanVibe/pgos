@@ -13,7 +13,7 @@ class OnboardResidentWorkflow {
     /**
      * Executes the complete transaction-safe resident onboarding.
      */
-    static async execute(pgId, bedId, phone, name, email, moveInDate, monthlyRent, securityDeposit, actorId, isQuickAdd = false, kycDocUrl, bypassEmailCheck = false, transferResident = false) {
+    static async execute(pgId, bedId, phone, name, email, moveInDate, monthlyRent, securityDeposit, actorId, isQuickAdd = false, kycDocUrl, bypassEmailCheck = false, transferResident = false, depositCollected = false, depositPaymentMode, depositCollectedAt) {
         // 1. Concurrency Check: Check & acquire Redis lock
         const isAllowed = await BedLockService_1.BedLockService.canMutate(bedId, actorId);
         if (!isAllowed) {
@@ -151,19 +151,34 @@ class OnboardResidentWorkflow {
                         status: isQuickAdd ? client_1.TenantStatus.INCOMPLETE : client_1.TenantStatus.ACTIVE,
                         monthlyRent,
                         securityDeposit,
-                        moveInDate,
+                        securityDepositStatus: depositCollected ? 'COLLECTED' : 'PENDING',
+                        depositCollectedAt: depositCollected ? (depositCollectedAt || new Date()) : null,
                         createdBy: actorId,
                         updatedBy: actorId,
                     }
                 });
-                // Create initial Rent Invoice
-                const invoiceAmount = monthlyRent + securityDeposit;
+                // 1. Create first month's Rent Invoice
                 await tx.rentInvoice.create({
                     data: {
                         pgTenantId: profile.id,
-                        amount: invoiceAmount,
-                        dueDate: new Date(), // Due immediately
+                        amount: monthlyRent,
+                        dueDate: moveInDate,
                         status: client_1.InvoiceStatus.PENDING,
+                        type: 'RENT',
+                        createdBy: actorId,
+                        updatedBy: actorId,
+                    }
+                });
+                // 2. Create Security Deposit Invoice
+                await tx.rentInvoice.create({
+                    data: {
+                        pgTenantId: profile.id,
+                        amount: securityDeposit,
+                        dueDate: moveInDate,
+                        status: depositCollected ? client_1.InvoiceStatus.PAID : client_1.InvoiceStatus.PENDING,
+                        paidAt: depositCollected ? (depositCollectedAt || new Date()) : null,
+                        paymentMode: depositCollected ? (depositPaymentMode || 'CASH') : null,
+                        type: 'SECURITY_DEPOSIT',
                         createdBy: actorId,
                         updatedBy: actorId,
                     }

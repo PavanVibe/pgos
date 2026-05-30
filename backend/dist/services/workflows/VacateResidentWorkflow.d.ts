@@ -19,6 +19,11 @@ export declare class VacateResidentWorkflow {
         historicalBedNumber: string | null;
         status: import(".prisma/client").$Enums.TenantStatus;
         securityDeposit: number;
+        securityDepositStatus: string;
+        depositCollectedAt: Date | null;
+        depositRefundedAmount: number | null;
+        depositRefundedAt: Date | null;
+        depositRefundMode: string | null;
         moveInDate: Date;
         moveOutDate: Date | null;
     }>;

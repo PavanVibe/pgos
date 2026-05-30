@@ -122,7 +122,10 @@ export function ReviewConfirmation() {
       isQuickAdd,
       kycDocUrl,
       bypassEmailCheck,
-      transferResident
+      transferResident,
+      depositCollected: rentConfig?.depositCollected || false,
+      depositPaymentMode: rentConfig?.depositPaymentMode,
+      depositCollectedAt: rentConfig?.depositCollectedAt
     };
 
     onboardingMutation.mutate(payload);
@@ -171,6 +174,36 @@ export function ReviewConfirmation() {
                 <span className="text-zinc-400 font-bold block text-[10px] uppercase tracking-wider">Security Deposit</span>
                 <span className="font-extrabold text-emerald-400 text-sm md:text-base">₹{rentConfig?.securityDeposit?.toLocaleString('en-IN')}</span>
               </div>
+              <div>
+                <span className="text-zinc-400 font-bold block text-[10px] uppercase tracking-wider">Deposit Status</span>
+                <span className={`text-xs md:text-sm font-black uppercase tracking-wider border px-2.5 py-0.5 rounded block text-center w-fit mt-0.5
+                  ${rentConfig?.depositCollected 
+                    ? 'text-emerald-400 border-emerald-500/20 bg-emerald-500/5' 
+                    : 'text-amber-400 border-amber-500/20 bg-amber-500/5'}`}
+                >
+                  {rentConfig?.depositCollected ? 'Collected' : 'Pending'}
+                </span>
+              </div>
+              {rentConfig?.depositCollected && (
+                <>
+                  <div>
+                    <span className="text-zinc-400 font-bold block text-[10px] uppercase tracking-wider">Deposit Mode</span>
+                    <span className="font-extrabold text-zinc-100 text-sm md:text-base uppercase mt-0.5 block">{rentConfig?.depositPaymentMode || 'UPI'}</span>
+                  </div>
+                  <div>
+                    <span className="text-zinc-400 font-bold block text-[10px] uppercase tracking-wider">Deposit Date</span>
+                    <span className="font-extrabold text-zinc-100 text-sm md:text-base mt-0.5 block">
+                      {rentConfig?.depositCollectedAt 
+                        ? new Date(rentConfig.depositCollectedAt).toLocaleDateString('en-IN', {
+                            day: 'numeric',
+                            month: 'short',
+                            year: 'numeric'
+                          })
+                        : '-'}
+                    </span>
+                  </div>
+                </>
+              )}
             </>
           )}
         </div>

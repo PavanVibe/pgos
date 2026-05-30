@@ -59,11 +59,12 @@ export default function CollectionsHistoryPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [yearFilter, setYearFilter] = useState<string>('all');
   const [paymentModeFilter, setPaymentModeFilter] = useState<string>('all');
+  const [transactionTypeFilter, setTransactionTypeFilter] = useState<string>('all');
 
   // 1. Fetch Collections History Cards
   const { data: historyResponse, isLoading: historyLoading } = useQuery({
-    queryKey: ['collections-history', activePgId],
-    queryFn: () => fetchApi(`/pgs/${activePgId}/dashboard/collections-history`),
+    queryKey: ['collections-history', activePgId, transactionTypeFilter],
+    queryFn: () => fetchApi(`/pgs/${activePgId}/dashboard/collections-history?type=${transactionTypeFilter.toUpperCase()}`),
     enabled: !!activePgId,
   });
 
@@ -80,8 +81,8 @@ export default function CollectionsHistoryPage() {
 
   // 2. Fetch Detailed Monthly Ledger
   const { data: ledgerResponse, isLoading: ledgerLoading } = useQuery({
-    queryKey: ['collection-ledger', activePgId, selectedLedgerMonth?.year, selectedLedgerMonth?.index],
-    queryFn: () => fetchApi(`/pgs/${activePgId}/dashboard/collections-history/${selectedLedgerMonth?.year}/${selectedLedgerMonth?.index}`),
+    queryKey: ['collection-ledger', activePgId, selectedLedgerMonth?.year, selectedLedgerMonth?.index, transactionTypeFilter],
+    queryFn: () => fetchApi(`/pgs/${activePgId}/dashboard/collections-history/${selectedLedgerMonth?.year}/${selectedLedgerMonth?.index}?type=${transactionTypeFilter.toUpperCase()}`),
     enabled: !!activePgId && !!selectedLedgerMonth,
   });
 
@@ -193,6 +194,16 @@ export default function CollectionsHistoryPage() {
           </div>
           
           <div className="flex gap-2">
+            <select
+              value={transactionTypeFilter}
+              onChange={(e) => setTransactionTypeFilter(e.target.value)}
+              className="bg-zinc-950 border border-zinc-900 px-3.5 py-2 rounded-xl text-sm font-semibold focus:outline-none text-primary cursor-pointer"
+            >
+              <option value="all">All Types</option>
+              <option value="rent">Rent</option>
+              <option value="security_deposit">Security Deposit</option>
+            </select>
+
             <select
               value={yearFilter}
               onChange={(e) => setYearFilter(e.target.value)}
@@ -392,10 +403,19 @@ export default function CollectionsHistoryPage() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-zinc-900/60 print:divide-zinc-200">
-                        {filteredLedger.map((row) => (
+                        {filteredLedger.map((row: any) => (
                           <tr key={row.id} className="hover:bg-zinc-900/20 print:hover:bg-transparent">
                             <td className="p-3.5 font-bold text-zinc-200 print:text-black">
-                              {row.residentName}
+                              <div>
+                                <span>{row.residentName}</span>
+                                <span className={`block text-[9px] uppercase tracking-wider font-extrabold mt-0.5 w-fit rounded px-1.5 py-0.5 border
+                                  ${row.type === 'SECURITY_DEPOSIT' 
+                                    ? 'text-blue-450 border-blue-500/20 bg-blue-500/5' 
+                                    : 'text-zinc-400 border-zinc-800 bg-zinc-900/20'}`}
+                                >
+                                  {row.type === 'SECURITY_DEPOSIT' ? 'Deposit' : 'Rent'}
+                                </span>
+                              </div>
                             </td>
                             <td className="p-3.5 font-semibold text-zinc-400 print:text-black">
                               Room {row.roomNumber} ({row.bedNumber})

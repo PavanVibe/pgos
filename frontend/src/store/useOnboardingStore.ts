@@ -13,6 +13,9 @@ export interface ResidentDetails {
 export interface RentConfig {
   monthlyRent: number;
   securityDeposit: number;
+  depositCollected?: boolean;
+  depositPaymentMode?: string;
+  depositCollectedAt?: string;
 }
 
 interface OnboardingState {

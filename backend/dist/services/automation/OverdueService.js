@@ -21,7 +21,8 @@ class OverdueService {
                 dueDate: {
                     lt: now
                 },
-                isActive: true
+                isActive: true,
+                type: 'RENT'
             },
             include: {
                 tenantProfile: {
@@ -80,7 +81,8 @@ class OverdueService {
             where: {
                 tenantProfile: { pgId },
                 status: { in: statusFilter },
-                isActive: true
+                isActive: true,
+                type: 'RENT'
             },
             include: {
                 tenantProfile: {
@@ -113,7 +115,8 @@ class OverdueService {
             where: {
                 pgTenantId: { in: tenantProfileIds },
                 status: 'PAID',
-                isActive: true
+                isActive: true,
+                type: 'RENT'
             },
             orderBy: { paidAt: 'desc' }
         });
@@ -128,7 +131,8 @@ class OverdueService {
             where: {
                 pgTenantId: { in: tenantProfileIds },
                 status: { in: ['PAID', 'PAST_DUE'] },
-                isActive: true
+                isActive: true,
+                type: 'RENT'
             }
         });
         const invoicesByTenant = new Map();

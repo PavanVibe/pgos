@@ -37,7 +37,8 @@ export const getPGDashboardSummary = async (pgId: string, orgId: string) => {
       where: { 
         tenantProfile: { pgId },
         status: { in: ['PENDING', 'PAST_DUE'] },
-        isActive: true
+        isActive: true,
+        type: 'RENT'
       },
       _sum: { amount: true }
     }),
@@ -68,7 +69,8 @@ export const getPGDashboardSummary = async (pgId: string, orgId: string) => {
       where: {
         tenantProfile: { pgId },
         status: 'PAST_DUE',
-        isActive: true
+        isActive: true,
+        type: 'RENT'
       }
     }),
     // Unpaid Invoices Count
@@ -76,7 +78,8 @@ export const getPGDashboardSummary = async (pgId: string, orgId: string) => {
       where: {
         tenantProfile: { pgId },
         status: { in: ['PENDING', 'PAST_DUE'] },
-        isActive: true
+        isActive: true,
+        type: 'RENT'
       }
     }),
     // Overdue Invoices Sum
@@ -84,7 +87,8 @@ export const getPGDashboardSummary = async (pgId: string, orgId: string) => {
       where: {
         tenantProfile: { pgId },
         status: 'PAST_DUE',
-        isActive: true
+        isActive: true,
+        type: 'RENT'
       },
       _sum: { amount: true }
     })
@@ -117,7 +121,8 @@ export const getPGDashboardSummary = async (pgId: string, orgId: string) => {
       tenantProfile: { pgId },
       status: 'PAID',
       paidAt: { gte: startOfCurrentMonth },
-      isActive: true
+      isActive: true,
+      type: 'RENT'
     },
     _sum: { amount: true }
   });
@@ -130,7 +135,8 @@ export const getPGDashboardSummary = async (pgId: string, orgId: string) => {
       tenantProfile: { pgId },
       status: 'PAID',
       paidAt: { gte: startOfCurrentMonth },
-      isActive: true
+      isActive: true,
+      type: 'RENT'
     }
   });
   const payingResidentsCount = payingResidentsGroup.length;
@@ -146,7 +152,8 @@ export const getPGDashboardSummary = async (pgId: string, orgId: string) => {
         gte: startOfLastMonth,
         lte: endOfLastMonth
       },
-      isActive: true
+      isActive: true,
+      type: 'RENT'
     },
     _sum: { amount: true }
   });

@@ -75,10 +75,20 @@ export default function ResidentProfileDrawer() {
 
   // Financial aggregates
   const invoices = profile?.invoices || [];
-  const totalPaid = invoices
-    .filter((inv: any) => inv.status === 'PAID')
+  
+  const totalRentPaid = invoices
+    .filter((inv: any) => inv.type === 'RENT' && inv.status === 'PAID')
     .reduce((sum: number, inv: any) => sum + inv.amount, 0);
-  const outstandingDues = invoices
+    
+  const outstandingRent = invoices
+    .filter((inv: any) => inv.type === 'RENT' && inv.status !== 'PAID')
+    .reduce((sum: number, inv: any) => sum + inv.amount, 0);
+    
+  const securityDepositHeld = invoices
+    .filter((inv: any) => inv.type === 'SECURITY_DEPOSIT' && inv.status === 'PAID')
+    .reduce((sum: number, inv: any) => sum + inv.amount, 0);
+
+  const outstandingTotal = invoices
     .filter((inv: any) => inv.status !== 'PAID')
     .reduce((sum: number, inv: any) => sum + inv.amount, 0);
 
@@ -212,6 +222,64 @@ export default function ResidentProfileDrawer() {
                   </div>
                 </div>
 
+                {/* 2.5 Dedicated Security Deposit Card */}
+                <div className="space-y-3">
+                  <h5 className="text-[11px] font-black uppercase tracking-widest text-zinc-500 flex items-center gap-1.5">
+                    <ShieldCheck className="h-3.5 w-3.5" />
+                    Security Deposit
+                  </h5>
+                  <div className="bg-zinc-950 p-4 border border-zinc-900 rounded-xl space-y-4">
+                    <div className="flex justify-between items-center border-b border-zinc-900/60 pb-3">
+                      <div>
+                        <span className="text-[9px] text-zinc-500 block uppercase tracking-wider font-bold">Deposit Amount</span>
+                        <span className="font-black text-lg text-blue-400 block mt-0.5">
+                          ₹{(profile.securityDeposit ?? 0).toLocaleString('en-IN')}
+                        </span>
+                      </div>
+                      <span className={`text-[10px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded border inline-block
+                        ${profile.securityDepositStatus === 'COLLECTED' 
+                          ? 'text-green-400 bg-green-500/10 border-green-500/15' 
+                          : 'text-amber-400 bg-amber-500/10 border-amber-500/15'}`}
+                      >
+                        {profile.securityDepositStatus === 'COLLECTED' ? 'Collected' : 'Pending'}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4 text-xs">
+                      <div>
+                        <span className="text-[9px] text-zinc-500 block uppercase tracking-wider font-bold">Collected On</span>
+                        <span className="font-extrabold text-zinc-300 block mt-0.5">
+                          {profile.depositCollectedAt 
+                            ? new Date(profile.depositCollectedAt).toLocaleDateString('en-IN', {
+                                day: '2-digit',
+                                month: 'short',
+                                year: 'numeric'
+                              })
+                            : 'N/A'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[9px] text-zinc-500 block uppercase tracking-wider font-bold">Payment Mode</span>
+                        <span className="font-extrabold text-zinc-300 block mt-0.5 uppercase">
+                          {profile.invoices.find((inv: any) => inv.type === 'SECURITY_DEPOSIT' && inv.status === 'PAID')?.paymentMode || 'N/A'}
+                        </span>
+                      </div>
+                      <div className="pt-3 border-t border-zinc-900/60 col-span-2">
+                        <span className="text-[9px] text-zinc-500 block uppercase tracking-wider font-bold">Refund Status</span>
+                        <span className="font-extrabold text-zinc-300 block mt-0.5">
+                          {profile.depositRefundedAt ? (
+                            <span className="text-amber-400">
+                              Refunded ₹{profile.depositRefundedAmount?.toLocaleString('en-IN')} via {profile.depositRefundMode} on {new Date(profile.depositRefundedAt).toLocaleDateString('en-IN')}
+                            </span>
+                          ) : (
+                            <span className="text-zinc-500">Not Refunded</span>
+                          )}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
                 {/* 3. KYC IDENTITY DOCUMENTS */}
                 <div className="space-y-3">
                   <h5 className="text-[11px] font-black uppercase tracking-widest text-zinc-500 flex items-center gap-1.5">
@@ -279,18 +347,20 @@ export default function ResidentProfileDrawer() {
                     {/* 3 Summary Cards */}
                     <div className="grid grid-cols-3 gap-2.5 bg-zinc-950 p-4 border border-zinc-900 rounded-xl text-xs font-semibold">
                       <div className="space-y-0.5">
-                        <span className="text-[8px] text-zinc-500 block uppercase font-bold tracking-wider">Total Paid</span>
-                        <span className="text-emerald-400 text-sm font-black">₹{totalPaid.toLocaleString('en-IN')}</span>
+                        <span className="text-[8px] text-zinc-500 block uppercase font-bold tracking-wider">Total Rent Paid</span>
+                        <span className="text-emerald-400 text-sm font-black">₹{totalRentPaid.toLocaleString('en-IN')}</span>
                       </div>
                       <div className="space-y-0.5 border-l border-zinc-900 pl-2.5">
-                        <span className="text-[8px] text-zinc-500 block uppercase font-bold tracking-wider">Unpaid Dues</span>
-                        <span className={`text-sm font-black ${outstandingDues > 0 ? 'text-red-400 animate-pulse' : 'text-zinc-400'}`}>
-                          ₹{outstandingDues.toLocaleString('en-IN')}
+                        <span className="text-[8px] text-zinc-500 block uppercase font-bold tracking-wider">Outstanding Rent</span>
+                        <span className={`text-sm font-black ${outstandingRent > 0 ? 'text-red-400 animate-pulse' : 'text-zinc-400'}`}>
+                          ₹{outstandingRent.toLocaleString('en-IN')}
                         </span>
                       </div>
                       <div className="space-y-0.5 border-l border-zinc-900 pl-2.5">
-                        <span className="text-[8px] text-zinc-500 block uppercase font-bold tracking-wider">Deposit Held</span>
-                        <span className="text-blue-400 text-sm font-black">₹{(profile.securityDeposit ?? 0).toLocaleString('en-IN')}</span>
+                        <span className="text-[8px] text-zinc-500 block uppercase font-bold tracking-wider">Total Outstanding</span>
+                        <span className={`text-sm font-black ${outstandingTotal > 0 ? 'text-red-400' : 'text-zinc-400'}`}>
+                          ₹{outstandingTotal.toLocaleString('en-IN')}
+                        </span>
                       </div>
                     </div>
 
@@ -306,7 +376,9 @@ export default function ResidentProfileDrawer() {
                             <div className="flex justify-between items-start">
                               <div className="space-y-0.5">
                                 <span className="font-extrabold text-zinc-200 block text-xs">
-                                  {inv.amount === profile.securityDeposit && inv.status !== 'PAID' ? 'Deposit Invoice' : 'Rent Invoice'}
+                                  {inv.type === 'SECURITY_DEPOSIT' 
+                                    ? (inv.status === 'PAID' ? 'Security Deposit Collected' : 'Security Deposit Pending') 
+                                    : 'Rent Invoice'}
                                 </span>
                                 <span className="text-[9px] text-zinc-500 block font-bold uppercase tracking-wide">
                                   Invoice Date: {new Date(inv.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}

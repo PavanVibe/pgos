@@ -2,7 +2,7 @@ export declare class OnboardResidentWorkflow {
     /**
      * Executes the complete transaction-safe resident onboarding.
      */
-    static execute(pgId: string, bedId: string, phone: string, name: string, email: string | undefined, moveInDate: Date, monthlyRent: number, securityDeposit: number, actorId: string, isQuickAdd?: boolean, kycDocUrl?: string, bypassEmailCheck?: boolean, transferResident?: boolean): Promise<{
+    static execute(pgId: string, bedId: string, phone: string, name: string, email: string | undefined, moveInDate: Date, monthlyRent: number, securityDeposit: number, actorId: string, isQuickAdd?: boolean, kycDocUrl?: string, bypassEmailCheck?: boolean, transferResident?: boolean, depositCollected?: boolean, depositPaymentMode?: string, depositCollectedAt?: Date): Promise<{
         id: string;
         createdBy: string | null;
         updatedBy: string | null;
@@ -19,6 +19,11 @@ export declare class OnboardResidentWorkflow {
         historicalBedNumber: string | null;
         status: import(".prisma/client").$Enums.TenantStatus;
         securityDeposit: number;
+        securityDepositStatus: string;
+        depositCollectedAt: Date | null;
+        depositRefundedAmount: number | null;
+        depositRefundedAt: Date | null;
+        depositRefundMode: string | null;
         moveInDate: Date;
         moveOutDate: Date | null;
     }>;

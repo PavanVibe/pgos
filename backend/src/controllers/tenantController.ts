@@ -36,7 +36,10 @@ const onboardSchema = z.object({
   isQuickAdd: z.boolean().default(false),
   kycDocUrl: z.string().optional(),
   bypassEmailCheck: z.boolean().optional(),
-  transferResident: z.boolean().optional()
+  transferResident: z.boolean().optional(),
+  depositCollected: z.boolean().default(false),
+  depositPaymentMode: z.string().optional(),
+  depositCollectedAt: z.string().optional()
 });
 
 export const onboard = async (req: Request, res: Response) => {
@@ -72,7 +75,10 @@ export const onboard = async (req: Request, res: Response) => {
       payload.isQuickAdd,
       payload.kycDocUrl,
       payload.bypassEmailCheck || false,
-      payload.transferResident || false
+      payload.transferResident || false,
+      payload.depositCollected,
+      payload.depositPaymentMode,
+      payload.depositCollectedAt ? new Date(payload.depositCollectedAt) : undefined
     );
 
     res.status(200).json({ status: 'success', data: profile });

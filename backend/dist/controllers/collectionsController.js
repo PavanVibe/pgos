@@ -11,12 +11,17 @@ const getCollectionsHistory = async (req, res) => {
         if (!pgId) {
             return res.status(400).json({ error: 'PG ID context is required.' });
         }
+        const { type } = req.query;
+        const invoiceWhere = {
+            tenantProfile: { pgId },
+            isActive: true,
+        };
+        if (type === 'RENT' || type === 'SECURITY_DEPOSIT') {
+            invoiceWhere.type = type;
+        }
         // 1. Fetch all active invoices for this PG
         const invoices = await prisma_1.default.rentInvoice.findMany({
-            where: {
-                tenantProfile: { pgId },
-                isActive: true,
-            },
+            where: invoiceWhere,
             orderBy: {
                 dueDate: 'desc',
             },
@@ -114,16 +119,21 @@ const getMonthlyCollectionLedger = async (req, res) => {
         }
         const startOfMonth = new Date(year, monthIndex, 1);
         const endOfMonth = new Date(year, monthIndex + 1, 0, 23, 59, 59, 999);
+        const { type } = req.query;
+        const invoiceWhere = {
+            tenantProfile: { pgId },
+            dueDate: {
+                gte: startOfMonth,
+                lte: endOfMonth,
+            },
+            isActive: true,
+        };
+        if (type === 'RENT' || type === 'SECURITY_DEPOSIT') {
+            invoiceWhere.type = type;
+        }
         // Fetch all invoices due in this calendar month
         const invoices = await prisma_1.default.rentInvoice.findMany({
-            where: {
-                tenantProfile: { pgId },
-                dueDate: {
-                    gte: startOfMonth,
-                    lte: endOfMonth,
-                },
-                isActive: true,
-            },
+            where: invoiceWhere,
             include: {
                 tenantProfile: {
                     include: {
@@ -157,6 +167,7 @@ const getMonthlyCollectionLedger = async (req, res) => {
                 paymentMode: inv.paymentMode || null,
                 referenceId: inv.referenceId || inv.id,
                 status: inv.status,
+                type: inv.type,
             };
         });
         res.status(200).json({ status: 'success', data: ledger });

@@ -1,4 +1,4 @@
-export declare const onboardResident: (pgId: string, bedId: string, phone: string, name: string, email: string | undefined, moveInDate: Date, monthlyRent: number, securityDeposit: number, actorId: string, isQuickAdd?: boolean) => Promise<{
+export declare const onboardResident: (pgId: string, bedId: string, phone: string, name: string, email: string | undefined, moveInDate: Date, monthlyRent: number, securityDeposit: number, actorId: string, isQuickAdd?: boolean, depositCollected?: boolean, depositPaymentMode?: string, depositCollectedAt?: Date) => Promise<{
     id: string;
     createdBy: string | null;
     updatedBy: string | null;
@@ -15,6 +15,11 @@ export declare const onboardResident: (pgId: string, bedId: string, phone: strin
     historicalBedNumber: string | null;
     status: import(".prisma/client").$Enums.TenantStatus;
     securityDeposit: number;
+    securityDepositStatus: string;
+    depositCollectedAt: Date | null;
+    depositRefundedAmount: number | null;
+    depositRefundedAt: Date | null;
+    depositRefundMode: string | null;
     moveInDate: Date;
     moveOutDate: Date | null;
 }>;

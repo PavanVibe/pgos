@@ -15,6 +15,11 @@ export declare const vacateResident: (tenantId: string, pgId: string, actorId: s
     historicalBedNumber: string | null;
     status: import(".prisma/client").$Enums.TenantStatus;
     securityDeposit: number;
+    securityDepositStatus: string;
+    depositCollectedAt: Date | null;
+    depositRefundedAmount: number | null;
+    depositRefundedAt: Date | null;
+    depositRefundMode: string | null;
     moveInDate: Date;
     moveOutDate: Date | null;
 }>;

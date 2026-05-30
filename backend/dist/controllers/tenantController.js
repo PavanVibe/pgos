@@ -39,7 +39,10 @@ const onboardSchema = zod_1.z.object({
     isQuickAdd: zod_1.z.boolean().default(false),
     kycDocUrl: zod_1.z.string().optional(),
     bypassEmailCheck: zod_1.z.boolean().optional(),
-    transferResident: zod_1.z.boolean().optional()
+    transferResident: zod_1.z.boolean().optional(),
+    depositCollected: zod_1.z.boolean().default(false),
+    depositPaymentMode: zod_1.z.string().optional(),
+    depositCollectedAt: zod_1.z.string().optional()
 });
 const onboard = async (req, res) => {
     try {
@@ -58,7 +61,7 @@ const onboard = async (req, res) => {
         if (activeProfile) {
             return res.status(409).json({ error: 'Bed already occupied. Refresh occupancy map.' });
         }
-        const profile = await OnboardResidentWorkflow_1.OnboardResidentWorkflow.execute(pgId, payload.bedId, payload.phone, payload.name, payload.email || undefined, new Date(payload.moveInDate), payload.monthlyRent, payload.securityDeposit, actorId, payload.isQuickAdd, payload.kycDocUrl, payload.bypassEmailCheck || false, payload.transferResident || false);
+        const profile = await OnboardResidentWorkflow_1.OnboardResidentWorkflow.execute(pgId, payload.bedId, payload.phone, payload.name, payload.email || undefined, new Date(payload.moveInDate), payload.monthlyRent, payload.securityDeposit, actorId, payload.isQuickAdd, payload.kycDocUrl, payload.bypassEmailCheck || false, payload.transferResident || false, payload.depositCollected, payload.depositPaymentMode, payload.depositCollectedAt ? new Date(payload.depositCollectedAt) : undefined);
         res.status(200).json({ status: 'success', data: profile });
     }
     catch (error) {

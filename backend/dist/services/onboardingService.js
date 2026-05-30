@@ -8,7 +8,7 @@ const prisma_1 = __importDefault(require("../utils/prisma"));
 const eventBus_1 = require("../events/eventBus");
 const lockService_1 = require("./lockService");
 const client_1 = require("@prisma/client");
-const onboardResident = async (pgId, bedId, phone, name, email, moveInDate, monthlyRent, securityDeposit, actorId, isQuickAdd = false) => {
+const onboardResident = async (pgId, bedId, phone, name, email, moveInDate, monthlyRent, securityDeposit, actorId, isQuickAdd = false, depositCollected = false, depositPaymentMode, depositCollectedAt) => {
     // 1. Check Redis Lock
     const isAllowed = await (0, lockService_1.canAllocateBed)(bedId, actorId);
     if (!isAllowed) {
@@ -48,19 +48,35 @@ const onboardResident = async (pgId, bedId, phone, name, email, moveInDate, mont
                 historicalBedNumber: bed.bedNumber,
                 status: isQuickAdd ? client_1.TenantStatus.INCOMPLETE : client_1.TenantStatus.ACTIVE,
                 securityDeposit,
+                securityDepositStatus: depositCollected ? 'COLLECTED' : 'PENDING',
+                depositCollectedAt: depositCollected ? (depositCollectedAt || new Date()) : null,
                 moveInDate,
                 createdBy: actorId,
                 updatedBy: actorId,
             }
         });
-        // Create Rent Invoice for first month
-        const invoiceAmount = monthlyRent + securityDeposit;
+        // 1. Create first month's Rent Invoice
         await tx.rentInvoice.create({
             data: {
                 pgTenantId: profile.id,
-                amount: invoiceAmount,
-                dueDate: new Date(), // Due immediately
+                amount: monthlyRent,
+                dueDate: moveInDate,
                 status: client_1.InvoiceStatus.PENDING,
+                type: 'RENT',
+                createdBy: actorId,
+                updatedBy: actorId,
+            }
+        });
+        // 2. Create Security Deposit Invoice
+        await tx.rentInvoice.create({
+            data: {
+                pgTenantId: profile.id,
+                amount: securityDeposit,
+                dueDate: moveInDate,
+                status: depositCollected ? client_1.InvoiceStatus.PAID : client_1.InvoiceStatus.PENDING,
+                paidAt: depositCollected ? (depositCollectedAt || new Date()) : null,
+                paymentMode: depositCollected ? (depositPaymentMode || 'CASH') : null,
+                type: 'SECURITY_DEPOSIT',
                 createdBy: actorId,
                 updatedBy: actorId,
             }
