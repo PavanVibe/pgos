@@ -269,51 +269,84 @@ export default function ResidentProfileDrawer() {
                       Identity documents not configured (Quick Added stay).
                     </div>
                   )}
-                </div>
-
-                {/* 4. FINANCIAL HISTORY */}
+                </div>                {/* 4. FINANCIAL LEDGER */}
                 <div className="space-y-3">
                   <h5 className="text-[11px] font-black uppercase tracking-widest text-zinc-500 flex items-center gap-1.5">
                     <DollarSign className="h-3.5 w-3.5" />
-                    Financial History
+                    Financial stay ledger
                   </h5>
                   <div className="space-y-3">
-                    <div className="grid grid-cols-2 gap-3 bg-zinc-950 p-4 border border-zinc-900 rounded-xl text-xs font-semibold">
+                    {/* 3 Summary Cards */}
+                    <div className="grid grid-cols-3 gap-2.5 bg-zinc-950 p-4 border border-zinc-900 rounded-xl text-xs font-semibold">
                       <div className="space-y-0.5">
-                        <span className="text-[9px] text-zinc-500 block uppercase font-bold tracking-wider">Total Rent Paid</span>
-                        <span className="text-emerald-400 text-base font-black">₹{totalPaid.toLocaleString('en-IN')}</span>
+                        <span className="text-[8px] text-zinc-500 block uppercase font-bold tracking-wider">Total Paid</span>
+                        <span className="text-emerald-400 text-sm font-black">₹{totalPaid.toLocaleString('en-IN')}</span>
                       </div>
-                      <div className="space-y-0.5 text-right">
-                        <span className="text-[9px] text-zinc-500 block uppercase font-bold tracking-wider">Outstanding Dues</span>
-                        <span className={`text-base font-black ${outstandingDues > 0 ? 'text-red-400 animate-pulse' : 'text-zinc-400'}`}>
+                      <div className="space-y-0.5 border-l border-zinc-900 pl-2.5">
+                        <span className="text-[8px] text-zinc-500 block uppercase font-bold tracking-wider">Unpaid Dues</span>
+                        <span className={`text-sm font-black ${outstandingDues > 0 ? 'text-red-400 animate-pulse' : 'text-zinc-400'}`}>
                           ₹{outstandingDues.toLocaleString('en-IN')}
                         </span>
                       </div>
+                      <div className="space-y-0.5 border-l border-zinc-900 pl-2.5">
+                        <span className="text-[8px] text-zinc-500 block uppercase font-bold tracking-wider">Deposit Held</span>
+                        <span className="text-blue-400 text-sm font-black">₹{(profile.securityDeposit ?? 0).toLocaleString('en-IN')}</span>
+                      </div>
                     </div>
 
-                    {/* Invoice ledger */}
-                    <div className="space-y-2 max-h-48 overflow-y-auto border border-zinc-900 rounded-xl divide-y divide-zinc-900 bg-zinc-950/20 scrollbar-none">
+                    {/* Detailed Transaction History Ledger */}
+                    <div className="space-y-2 max-h-64 overflow-y-auto scrollbar-none">
                       {invoices.length === 0 ? (
-                        <div className="p-4 text-center text-[10px] text-zinc-500 font-bold uppercase tracking-wider">No invoice billing records.</div>
+                        <div className="p-4 text-center text-[10px] text-zinc-500 font-bold uppercase tracking-wider border border-dashed border-zinc-900 rounded-xl bg-zinc-950/20">
+                          No financial transactions recorded.
+                        </div>
                       ) : (
                         invoices.map((inv: any) => (
-                          <div key={inv.id} className="p-3 flex justify-between items-center text-xs font-semibold">
-                            <div className="space-y-0.5">
-                              <span className="text-zinc-200">Rent Invoice</span>
-                              <span className="text-[10px] text-zinc-500 block">
-                                Due: {new Date(inv.dueDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
-                              </span>
+                          <div key={inv.id} className="p-3.5 space-y-2 text-xs border border-zinc-900 bg-zinc-950/40 rounded-xl flex flex-col hover:border-zinc-800 transition-colors">
+                            <div className="flex justify-between items-start">
+                              <div className="space-y-0.5">
+                                <span className="font-extrabold text-zinc-200 block text-xs">
+                                  {inv.amount === profile.securityDeposit && inv.status !== 'PAID' ? 'Deposit Invoice' : 'Rent Invoice'}
+                                </span>
+                                <span className="text-[9px] text-zinc-500 block font-bold uppercase tracking-wide">
+                                  Invoice Date: {new Date(inv.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                </span>
+                              </div>
+                              <div className="text-right space-y-0.5">
+                                <span className="text-xs font-black text-zinc-150">₹{inv.amount.toLocaleString('en-IN')}</span>
+                                <span className={`text-[8px] font-black uppercase tracking-wider border px-1.5 py-0.5 rounded block text-center w-fit ml-auto
+                                  ${inv.status === 'PAID' ? 'text-emerald-400 border-emerald-500/20 bg-emerald-500/5' : 
+                                    inv.status === 'PAST_DUE' ? 'text-red-400 border-red-500/20 bg-red-500/5' : 
+                                    'text-amber-400 border-amber-500/20 bg-amber-500/5'}`}
+                                >
+                                  {inv.status}
+                                </span>
+                              </div>
                             </div>
-                            <div className="flex items-center gap-3">
-                              <span className="text-zinc-350">₹{inv.amount.toLocaleString('en-IN')}</span>
-                              <span className={`text-[9px] font-black uppercase tracking-wider border px-2 py-0.5 rounded
-                                ${inv.status === 'PAID' ? 'text-emerald-400 border-emerald-500/20 bg-emerald-500/5' : 
-                                  inv.status === 'PAST_DUE' ? 'text-red-400 border-red-500/20 bg-red-500/5' : 
-                                  'text-amber-400 border-amber-500/20 bg-amber-500/5'}`}
-                              >
-                                {inv.status}
-                              </span>
+                            
+                            <div className="grid grid-cols-2 gap-2 text-[9px] text-zinc-500 pt-1.5 border-t border-zinc-900/60 font-bold uppercase tracking-wider">
+                              <div>
+                                <span className="text-zinc-500 block text-[8px]">Due Date</span>
+                                <span className="text-zinc-350">{new Date(inv.dueDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+                              </div>
+                              {inv.status === 'PAID' && inv.paidAt && (
+                                <div className="text-right">
+                                  <span className="text-zinc-500 block text-[8px]">Payment Date</span>
+                                  <span className="text-zinc-350">{new Date(inv.paidAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+                                </div>
+                              )}
                             </div>
+
+                            {inv.status === 'PAID' && (inv.paymentMode || inv.razorpayPayId || inv.referenceId) && (
+                              <div className="bg-zinc-900/35 border border-zinc-900/80 p-2 rounded-lg text-[9px] text-zinc-500 flex justify-between items-center font-bold tracking-wide">
+                                <span>Method: <strong className="text-zinc-300 uppercase">{inv.paymentMode || (inv.razorpayPayId ? 'UPI/ONLINE' : 'N/A')}</strong></span>
+                                {(inv.referenceId || inv.razorpayPayId) && (
+                                  <span className="font-mono text-[9px] truncate max-w-[170px]" title={inv.referenceId || inv.razorpayPayId}>
+                                    Ref: {inv.referenceId || inv.razorpayPayId}
+                                  </span>
+                                )}
+                              </div>
+                            )}
                           </div>
                         ))
                       )}

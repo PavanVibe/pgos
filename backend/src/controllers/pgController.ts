@@ -156,7 +156,8 @@ export const payRent = async (req: Request, res: Response) => {
       paymentMode, 
       actorId, 
       parsedAmount,
-      invoiceId as string | undefined
+      invoiceId as string | undefined,
+      referenceId as string | undefined
     );
     res.status(200).json({ status: 'success', data: updatedInvoice });
   } catch (error: any) {

@@ -188,6 +188,8 @@ model RentInvoice {
   razorpayOrdId String?
   razorpayPayId String?
   paidAt        DateTime?
+  paymentMode   String?
+  referenceId   String?
   
   createdBy     String?
   updatedBy     String?

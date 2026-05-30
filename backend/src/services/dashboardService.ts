@@ -110,6 +110,48 @@ export const getPGDashboardSummary = async (pgId: string, orgId: string) => {
       .map(res => res.tenantProfileId)
   )).length;
 
+  // 1. Current calendar month collections
+  const startOfCurrentMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+  const currentMonthPaidInvoices = await prisma.rentInvoice.aggregate({
+    where: {
+      tenantProfile: { pgId },
+      status: 'PAID',
+      paidAt: { gte: startOfCurrentMonth },
+      isActive: true
+    },
+    _sum: { amount: true }
+  });
+  const collectedThisMonth = currentMonthPaidInvoices._sum.amount || 0;
+
+  // 2. Unique paying residents this month
+  const payingResidentsGroup = await prisma.rentInvoice.groupBy({
+    by: ['pgTenantId'],
+    where: {
+      tenantProfile: { pgId },
+      status: 'PAID',
+      paidAt: { gte: startOfCurrentMonth },
+      isActive: true
+    }
+  });
+  const payingResidentsCount = payingResidentsGroup.length;
+
+  // 3. Last calendar month collections (for comparison trend)
+  const startOfLastMonth = new Date(new Date().getFullYear(), new Date().getMonth() - 1, 1);
+  const endOfLastMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 0, 23, 59, 59, 999);
+  const lastMonthPaidInvoices = await prisma.rentInvoice.aggregate({
+    where: {
+      tenantProfile: { pgId },
+      status: 'PAID',
+      paidAt: {
+        gte: startOfLastMonth,
+        lte: endOfLastMonth
+      },
+      isActive: true
+    },
+    _sum: { amount: true }
+  });
+  const collectedLastMonth = lastMonthPaidInvoices._sum.amount || 0;
+
   return {
     totalBeds,
     occupiedBeds,
@@ -122,6 +164,9 @@ export const getPGDashboardSummary = async (pgId: string, orgId: string) => {
     chronicDelayCount,
     unresolvedComplaints,
     highPriorityComplaints,
-    monthlyExpenses: expenses._sum.amount || 0
+    monthlyExpenses: expenses._sum.amount || 0,
+    collectedThisMonth,
+    payingResidentsCount,
+    collectedLastMonth
   };
 };

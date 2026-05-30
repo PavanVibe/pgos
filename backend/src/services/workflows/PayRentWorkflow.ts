@@ -14,7 +14,8 @@ export class PayRentWorkflow {
     method: 'upi' | 'cash',
     actorId: string,
     amount?: number,
-    invoiceId?: string
+    invoiceId?: string,
+    referenceId?: string
   ) {
     // 1. Concurrency Check: Prevent duplicate payment submits on this tenant
     const lockAcquired = await PaymentLockService.acquireLock(tenantId, actorId);
@@ -56,6 +57,8 @@ export class PayRentWorkflow {
             status: InvoiceStatus.PAID,
             amount: paymentAmount, // actual amount received
             paidAt: new Date(),
+            paymentMode: method,
+            referenceId: referenceId,
             updatedBy: actorId,
           }
         });
