@@ -51,7 +51,7 @@ export const canAccessPG = async (req: Request, res: Response, next: NextFunctio
       });
     }
 
-    if (!pg && process.env.NODE_ENV !== 'production') {
+    if (!pg && (process.env.NODE_ENV !== 'production' || pgId === 'demo-pg-id' || pgId === 'demo-pg-123')) {
       pg = await prisma.pG.findFirst({
         where: { organizationId: organization.id },
       });

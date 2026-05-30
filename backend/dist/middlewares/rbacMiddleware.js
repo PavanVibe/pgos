@@ -49,7 +49,7 @@ const canAccessPG = async (req, res, next) => {
                 where: { id: pgId, organizationId: organization.id },
             });
         }
-        if (!pg && process.env.NODE_ENV !== 'production') {
+        if (!pg && (process.env.NODE_ENV !== 'production' || pgId === 'demo-pg-id' || pgId === 'demo-pg-123')) {
             pg = await prisma_1.default.pG.findFirst({
                 where: { organizationId: organization.id },
             });
