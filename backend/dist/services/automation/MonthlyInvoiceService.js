@@ -58,7 +58,7 @@ class MonthlyInvoiceService {
                 continue;
             }
             // Create new invoice for the monthly rent
-            const rentAmount = profile.bed.monthlyRent;
+            const rentAmount = profile.monthlyRent || profile.bed.monthlyRent;
             await prisma_1.default.$transaction(async (tx) => {
                 const invoice = await tx.rentInvoice.create({
                     data: {

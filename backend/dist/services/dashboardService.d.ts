@@ -11,5 +11,8 @@ export declare const getPGDashboardSummary: (pgId: string, orgId: string) => Pro
     unresolvedComplaints: number;
     highPriorityComplaints: number;
     monthlyExpenses: number;
+    collectedThisMonth: number;
+    payingResidentsCount: number;
+    collectedLastMonth: number;
 }>;
 //# sourceMappingURL=dashboardService.d.ts.map

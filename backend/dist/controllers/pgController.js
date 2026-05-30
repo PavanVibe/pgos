@@ -56,7 +56,7 @@ const getOrganizationPGs = async (req, res) => {
 exports.getOrganizationPGs = getOrganizationPGs;
 const allocateBedController = async (req, res) => {
     try {
-        const { pgId } = req.params;
+        const pgId = req.pg?.id || req.params.pgId;
         const { bedId, globalTenantId, securityDeposit, moveInDate } = req.body;
         const actorId = req.auth?.userId || 'system';
         const profile = await (0, bedService_1.allocateBed)(bedId, globalTenantId, pgId, securityDeposit, new Date(moveInDate), actorId);
@@ -76,7 +76,7 @@ const ResolveComplaintWorkflow_1 = require("../services/workflows/ResolveComplai
  */
 const getPGRooms = async (req, res) => {
     try {
-        const { pgId } = req.params;
+        const pgId = req.pg?.id || req.params.pgId;
         const rooms = await prisma_1.default.room.findMany({
             where: { pgId: pgId, isActive: true },
             include: {
@@ -88,6 +88,7 @@ const getPGRooms = async (req, res) => {
                             select: {
                                 id: true,
                                 status: true,
+                                monthlyRent: true,
                                 securityDeposit: true,
                                 moveInDate: true,
                                 globalTenant: {
@@ -130,14 +131,20 @@ const getPGRooms = async (req, res) => {
 exports.getPGRooms = getPGRooms;
 const payRent = async (req, res) => {
     try {
-        const { pgId, tenantId } = req.params;
-        const { method, amount, invoiceId } = req.body;
+        const pgId = req.pg?.id || req.params.pgId;
+        const { tenantId } = req.params;
+        const { amount, paidAt, referenceId, invoiceId } = req.body;
         const actorId = req.auth?.userId || 'system';
-        if (!method || (method !== 'upi' && method !== 'cash')) {
+        let paymentMode = req.body.paymentMode;
+        if (req.body.method && !req.body.paymentMode) {
+            console.warn(`[Deprecation Warning] Deprecated payment payload key "method" detected from actor ${actorId}. Use "paymentMode" instead.`);
+            paymentMode = req.body.method;
+        }
+        if (!paymentMode || (paymentMode !== 'upi' && paymentMode !== 'cash')) {
             return res.status(400).json({ error: 'Valid payment method (upi/cash) is required.' });
         }
         const parsedAmount = amount !== undefined && amount !== null ? parseFloat(amount) : undefined;
-        const updatedInvoice = await PayRentWorkflow_1.PayRentWorkflow.execute(pgId, tenantId, method, actorId, parsedAmount, invoiceId);
+        const updatedInvoice = await PayRentWorkflow_1.PayRentWorkflow.execute(pgId, tenantId, paymentMode, actorId, parsedAmount, invoiceId, referenceId);
         res.status(200).json({ status: 'success', data: updatedInvoice });
     }
     catch (error) {
@@ -150,7 +157,7 @@ exports.payRent = payRent;
  */
 const createComplaint = async (req, res) => {
     try {
-        const { pgId } = req.params;
+        const pgId = req.pg?.id || req.params.pgId;
         const { roomOrArea, description, priority, category } = req.body;
         const actorId = req.auth?.userId || 'system';
         if (!roomOrArea || !description || !priority) {
@@ -169,7 +176,8 @@ exports.createComplaint = createComplaint;
  */
 const resolveComplaint = async (req, res) => {
     try {
-        const { pgId, complaintId } = req.params;
+        const pgId = req.pg?.id || req.params.pgId;
+        const { complaintId } = req.params;
         const actorId = req.auth?.userId || 'system';
         const updatedComplaint = await ResolveComplaintWorkflow_1.ResolveComplaintWorkflow.execute(pgId, complaintId, actorId);
         res.status(200).json({ status: 'success', data: updatedComplaint });
@@ -184,7 +192,7 @@ exports.resolveComplaint = resolveComplaint;
  */
 const getPGComplaints = async (req, res) => {
     try {
-        const { pgId } = req.params;
+        const pgId = req.pg?.id || req.params.pgId;
         const complaints = await prisma_1.default.complaint.findMany({
             where: { pgId: pgId, isActive: true },
             include: {
@@ -226,7 +234,8 @@ exports.getPGComplaints = getPGComplaints;
  */
 const getPGComplaint = async (req, res) => {
     try {
-        const { pgId, complaintId } = req.params;
+        const pgId = req.pg?.id || req.params.pgId;
+        const { complaintId } = req.params;
         const complaint = await prisma_1.default.complaint.findFirst({
             where: { id: complaintId, pgId: pgId, isActive: true },
             include: {
@@ -269,7 +278,8 @@ exports.getPGComplaint = getPGComplaint;
  * Fetches comprehensive room operational history ledger (beds, current/past occupants, invoices, complaints, operational timeline, and revenue stats).
  */
 const getRoomHistory = async (req, res) => {
-    const { pgId, roomId } = req.params;
+    const pgId = req.pg?.id || req.params.pgId;
+    const { roomId } = req.params;
     console.log("pgId", pgId);
     console.log("roomId", roomId);
     let room = null;
@@ -286,6 +296,7 @@ const getRoomHistory = async (req, res) => {
                             select: {
                                 id: true,
                                 status: true,
+                                monthlyRent: true,
                                 securityDeposit: true,
                                 moveInDate: true,
                                 globalTenant: {
@@ -491,7 +502,7 @@ exports.scanOverdueManual = scanOverdueManual;
  */
 const getOverdueResidentsManual = async (req, res) => {
     try {
-        const { pgId } = req.params;
+        const pgId = req.pg?.id || req.params.pgId;
         const { filter } = req.query;
         // Aligned with the expanded Zustand sheet states
         let statusFilter = [client_1.InvoiceStatus.PAST_DUE];
@@ -587,7 +598,8 @@ exports.sendReminderManual = sendReminderManual;
  */
 const saveTenantNoteManual = async (req, res) => {
     try {
-        const { pgId, tenantId } = req.params;
+        const pgId = req.pg?.id || req.params.pgId;
+        const { tenantId } = req.params;
         const { note } = req.body;
         const actorId = req.auth?.userId || 'system-manual';
         if (note === undefined || note === null) {

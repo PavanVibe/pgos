@@ -4,7 +4,7 @@ exports.getActivity = exports.getOccupancy = exports.getTasks = void 0;
 const OperationalSummaryService_1 = require("../services/OperationalSummaryService");
 const getTasks = async (req, res) => {
     try {
-        const { pgId } = req.params;
+        const pgId = req.pg?.id || req.params.pgId;
         const tasks = await OperationalSummaryService_1.OperationalSummaryService.getTasksSummary(pgId);
         res.status(200).json({ status: 'success', data: tasks });
     }
@@ -15,7 +15,7 @@ const getTasks = async (req, res) => {
 exports.getTasks = getTasks;
 const getOccupancy = async (req, res) => {
     try {
-        const { pgId } = req.params;
+        const pgId = req.pg?.id || req.params.pgId;
         const occupancy = await OperationalSummaryService_1.OperationalSummaryService.getOccupancySummary(pgId);
         res.status(200).json({ status: 'success', data: occupancy });
     }
@@ -26,7 +26,7 @@ const getOccupancy = async (req, res) => {
 exports.getOccupancy = getOccupancy;
 const getActivity = async (req, res) => {
     try {
-        const { pgId } = req.params;
+        const pgId = req.pg?.id || req.params.pgId;
         const activity = await OperationalSummaryService_1.OperationalSummaryService.getActivityFeed(pgId);
         res.status(200).json({ status: 'success', data: activity });
     }

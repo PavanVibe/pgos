@@ -13,7 +13,7 @@ class OnboardResidentWorkflow {
     /**
      * Executes the complete transaction-safe resident onboarding.
      */
-    static async execute(pgId, bedId, phone, name, email, moveInDate, monthlyRent, securityDeposit, actorId, isQuickAdd = false, kycDocUrl) {
+    static async execute(pgId, bedId, phone, name, email, moveInDate, monthlyRent, securityDeposit, actorId, isQuickAdd = false, kycDocUrl, bypassEmailCheck = false, transferResident = false) {
         // 1. Concurrency Check: Check & acquire Redis lock
         const isAllowed = await BedLockService_1.BedLockService.canMutate(bedId, actorId);
         if (!isAllowed) {
@@ -36,13 +36,101 @@ class OnboardResidentWorkflow {
                 if (existingAllocation) {
                     throw new Error('Bed already occupied. Refresh occupancy map.');
                 }
-                // Upsert Global Tenant by phone
+                // Clean values
                 const cleanPhone = phone.replace(/\s/g, '');
-                const globalTenant = await tx.globalTenant.upsert({
-                    where: { phone: cleanPhone },
-                    update: { name, email, kycDocUrl },
-                    create: { phone: cleanPhone, name, email, kycDocUrl }
+                const cleanEmail = email ? email.trim() : undefined;
+                // Fetch existing tenants
+                const tenantByPhone = await tx.globalTenant.findUnique({
+                    where: { phone: cleanPhone }
                 });
+                const tenantByEmail = cleanEmail
+                    ? await tx.globalTenant.findUnique({ where: { email: cleanEmail } })
+                    : null;
+                // Block identity mismatch (Rule 3)
+                if (tenantByPhone && tenantByEmail && tenantByPhone.id !== tenantByEmail.id) {
+                    throw new Error('CONFLICT_DIFFERENT_RECORDS');
+                }
+                // Check for active stays on the resolved/matching tenant BEFORE creating a new profile
+                const matchedTenant = tenantByPhone || tenantByEmail;
+                if (matchedTenant) {
+                    const activeStay = await tx.pGTenantProfile.findFirst({
+                        where: {
+                            globalTenantId: matchedTenant.id,
+                            status: { in: [client_1.TenantStatus.ACTIVE, client_1.TenantStatus.NOTICE] }
+                        },
+                        include: { room: true, bed: true }
+                    });
+                    if (activeStay) {
+                        if (!transferResident) {
+                            const activeRoomNum = activeStay.historicalRoomNumber || activeStay.room?.number || 'N/A';
+                            const activeBedLabel = activeStay.historicalBedNumber || activeStay.bed?.bedNumber || 'N/A';
+                            throw new Error(`WARNING_ACTIVE_OCCUPANCY:${activeRoomNum}:${activeBedLabel}:${activeStay.id}`);
+                        }
+                        // Auto-transfer: vacate from old bed
+                        await tx.pGTenantProfile.update({
+                            where: { id: activeStay.id },
+                            data: {
+                                status: client_1.TenantStatus.PAST,
+                                moveOutDate: new Date(),
+                                bedId: null, // Free the old bed
+                                updatedBy: actorId,
+                            }
+                        });
+                        // Write transfer audit log
+                        await tx.auditLog.create({
+                            data: {
+                                actorId,
+                                action: 'RESIDENT_TRANSFERRED_OUT',
+                                entityType: 'PGTenantProfile',
+                                entityId: activeStay.id,
+                                metadata: { pgId, bedId: activeStay.bedId }
+                            }
+                        });
+                    }
+                }
+                let globalTenant;
+                if (tenantByPhone) {
+                    // Rule 1: Phone Match
+                    // Do NOT mutate or overwrite existing email or name if they are already present!
+                    let updatedEmail = tenantByPhone.email;
+                    if (!updatedEmail && cleanEmail) {
+                        updatedEmail = cleanEmail;
+                    }
+                    globalTenant = await tx.globalTenant.update({
+                        where: { id: tenantByPhone.id },
+                        data: {
+                            name: tenantByPhone.name || name, // Keep existing name
+                            email: updatedEmail,
+                            kycDocUrl: kycDocUrl || tenantByPhone.kycDocUrl
+                        }
+                    });
+                }
+                else if (tenantByEmail) {
+                    // Rule 2: Email Match Only
+                    if (!bypassEmailCheck) {
+                        throw new Error(`WARNING_EMAIL_EXISTS:${tenantByEmail.id}:${tenantByEmail.name || 'Unknown'}:${tenantByEmail.phone}:${tenantByEmail.email || ''}`);
+                    }
+                    // Reuse existing resident - owner explicitly clicked Reuse, so they consent to updating phone
+                    globalTenant = await tx.globalTenant.update({
+                        where: { id: tenantByEmail.id },
+                        data: {
+                            phone: cleanPhone, // Consent given
+                            name: tenantByEmail.name || name, // Keep existing name
+                            kycDocUrl: kycDocUrl || tenantByEmail.kycDocUrl
+                        }
+                    });
+                }
+                else {
+                    // Rule 4: No Match
+                    globalTenant = await tx.globalTenant.create({
+                        data: {
+                            phone: cleanPhone,
+                            name,
+                            email: cleanEmail,
+                            kycDocUrl
+                        }
+                    });
+                }
                 // Fetch bed to resolve parent room number and roomId
                 const bed = await tx.bed.findUnique({
                     where: { id: bedId },
@@ -61,6 +149,7 @@ class OnboardResidentWorkflow {
                         historicalRoomNumber: bed.room.number,
                         historicalBedNumber: bed.bedNumber,
                         status: isQuickAdd ? client_1.TenantStatus.INCOMPLETE : client_1.TenantStatus.ACTIVE,
+                        monthlyRent,
                         securityDeposit,
                         moveInDate,
                         createdBy: actorId,

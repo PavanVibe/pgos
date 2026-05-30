@@ -1,12 +1,24 @@
 async function main() {
-  console.log("Fetching dashboard summary via HTTP...");
+  const pgId = "demo-pg-123";
+  
+  console.log("Fetching dashboard summary for demo-pg-123...");
   try {
-    const res = await fetch("http://localhost:5000/api/pgs/13007fcc-2c7d-4fb1-98c6-19e07ba06363/dashboard/summary");
-    console.log("HTTP Response Status:", res.status);
+    const res = await fetch(`http://localhost:5000/api/pgs/${pgId}/dashboard/summary`);
+    console.log("Summary HTTP Status:", res.status);
     const json = await res.json();
-    console.log("HTTP Response JSON:", JSON.stringify(json, null, 2));
+    console.log("Summary JSON:", JSON.stringify(json, null, 2));
   } catch (err) {
-    console.error("HTTP Fetch Error:", err);
+    console.error("Summary Fetch Error:", err);
+  }
+
+  console.log("\nFetching dashboard tasks for demo-pg-123...");
+  try {
+    const res = await fetch(`http://localhost:5000/api/pgs/${pgId}/dashboard/tasks`);
+    console.log("Tasks HTTP Status:", res.status);
+    const json = await res.json();
+    console.log("Tasks JSON:", JSON.stringify(json, null, 2));
+  } catch (err) {
+    console.error("Tasks Fetch Error:", err);
   }
 }
 

@@ -5,7 +5,7 @@ const dashboardService_1 = require("../services/dashboardService");
 const getDashboardSummary = async (req, res) => {
     try {
         const org = req.organization;
-        const { pgId } = req.params;
+        const pgId = req.pg?.id || req.params.pgId;
         const summary = await (0, dashboardService_1.getPGDashboardSummary)(pgId, org.id);
         res.status(200).json({ status: 'success', data: summary });
     }

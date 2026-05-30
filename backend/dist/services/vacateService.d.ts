@@ -8,6 +8,7 @@ export declare const vacateResident: (tenantId: string, pgId: string, actorId: s
     updatedAt: Date;
     pgId: string;
     roomId: string;
+    monthlyRent: number;
     globalTenantId: string;
     bedId: string | null;
     historicalRoomNumber: string | null;

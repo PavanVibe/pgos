@@ -15,10 +15,14 @@ class VacateResidentWorkflow {
     static async execute(pgId, tenantId, actorId) {
         const result = await prisma_1.default.$transaction(async (tx) => {
             const profile = await tx.pGTenantProfile.findFirst({
-                where: { id: tenantId, pgId, status: client_1.TenantStatus.ACTIVE }
+                where: {
+                    id: tenantId,
+                    pgId,
+                    status: { in: [client_1.TenantStatus.ACTIVE, client_1.TenantStatus.NOTICE, client_1.TenantStatus.INCOMPLETE] }
+                }
             });
             if (!profile) {
-                throw new Error('Active tenant profile not found.');
+                throw new Error('Active resident stay profile not found.');
             }
             // Update tenant profile status to PAST
             const updatedProfile = await tx.pGTenantProfile.update({

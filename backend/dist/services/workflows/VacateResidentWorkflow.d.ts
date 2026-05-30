@@ -12,6 +12,7 @@ export declare class VacateResidentWorkflow {
         updatedAt: Date;
         pgId: string;
         roomId: string;
+        monthlyRent: number;
         globalTenantId: string;
         bedId: string | null;
         historicalRoomNumber: string | null;

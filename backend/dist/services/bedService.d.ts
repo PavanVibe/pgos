@@ -8,6 +8,7 @@ export declare const allocateBed: (bedId: string, globalTenantId: string, pgId: 
     updatedAt: Date;
     pgId: string;
     roomId: string;
+    monthlyRent: number;
     globalTenantId: string;
     bedId: string | null;
     historicalRoomNumber: string | null;

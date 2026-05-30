@@ -1,1 +1,1 @@
-{"version":3,"file":"bedService.d.ts","sourceRoot":"","sources":["../../src/services/bedService.ts"],"names":[],"mappings":"AAGA,eAAO,MAAM,WAAW,GACtB,OAAO,MAAM,EACb,gBAAgB,MAAM,EACtB,MAAM,MAAM,EACZ,iBAAiB,MAAM,EACvB,YAAY,IAAI,EAChB,SAAS,MAAM;;;;;;;;;;;;;;;;;;EA0DhB,CAAC"}
+{"version":3,"file":"bedService.d.ts","sourceRoot":"","sources":["../../src/services/bedService.ts"],"names":[],"mappings":"AAGA,eAAO,MAAM,WAAW,GACtB,OAAO,MAAM,EACb,gBAAgB,MAAM,EACtB,MAAM,MAAM,EACZ,iBAAiB,MAAM,EACvB,YAAY,IAAI,EAChB,SAAS,MAAM;;;;;;;;;;;;;;;;;;;EA0DhB,CAAC"}

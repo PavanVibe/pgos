@@ -8,6 +8,7 @@ const router = (0, express_1.Router)();
 // Secure all tenant routes
 router.use(authMiddleware_1.requireAuth, authMiddleware_1.attachOrgContext, rbacMiddleware_1.canAccessOrganization);
 router.get('/search-by-phone', tenantController_1.searchByPhone);
+router.get('/profiles/:profileId', tenantController_1.getResidentProfile);
 router.post('/pgs/:pgId/onboard', rbacMiddleware_1.canAccessPG, (0, rbacMiddleware_1.auditAction)('START_ONBOARDING', 'PGTenantProfile'), tenantController_1.onboard);
 router.post('/beds/:bedId/lock', tenantController_1.lockBedForOnboarding);
 router.post('/pgs/:pgId/tenants/:tenantId/vacate', rbacMiddleware_1.canAccessPG, (0, rbacMiddleware_1.auditAction)('VACATE_RESIDENT', 'PGTenantProfile'), tenantController_1.vacate);

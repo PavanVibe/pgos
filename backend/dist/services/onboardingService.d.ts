@@ -8,6 +8,7 @@ export declare const onboardResident: (pgId: string, bedId: string, phone: strin
     updatedAt: Date;
     pgId: string;
     roomId: string;
+    monthlyRent: number;
     globalTenantId: string;
     bedId: string | null;
     historicalRoomNumber: string | null;

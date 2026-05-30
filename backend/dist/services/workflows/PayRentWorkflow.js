@@ -13,7 +13,7 @@ class PayRentWorkflow {
     /**
      * Records a rent payment transaction, settling the oldest pending invoice for a tenant.
      */
-    static async execute(pgId, tenantId, method, actorId, amount, invoiceId) {
+    static async execute(pgId, tenantId, method, actorId, amount, invoiceId, referenceId) {
         // 1. Concurrency Check: Prevent duplicate payment submits on this tenant
         const lockAcquired = await PaymentLockService_1.PaymentLockService.acquireLock(tenantId, actorId);
         if (!lockAcquired) {
@@ -50,6 +50,8 @@ class PayRentWorkflow {
                         status: client_1.InvoiceStatus.PAID,
                         amount: paymentAmount, // actual amount received
                         paidAt: new Date(),
+                        paymentMode: method,
+                        referenceId: referenceId,
                         updatedBy: actorId,
                     }
                 });
