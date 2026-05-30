@@ -119,18 +119,22 @@ export class ResolveComplaintWorkflow {
           throw new Error('Deposit already settled. Recovery cannot be attached.');
         }
 
-        // Rule 4: If method is DEPOSIT, check remaining deposit balance
+        // Calculate remaining refundable deposit
+        const collectedDeposit = targetProfile.invoices.reduce((sum, inv) => sum + inv.amount, 0);
+        const refundedAmount = targetProfile.depositRefundedAmount || 0;
+        const previouslyDeducted = targetProfile.depositDeductionAmount || 0;
+        const pendingRecoveries = targetProfile.damageRecoveries.reduce((sum, rec) => sum + rec.amount, 0);
+
+        const remainingRefundableDeposit = Math.max(0, collectedDeposit - refundedAmount - previouslyDeducted - pendingRecoveries);
+
+        let depositDeduction = 0;
+        let outstanding = totalCost;
+        let recoveryStatus = 'PENDING';
+
         if (recoveryMethodInput === 'DEPOSIT') {
-          const collectedDeposit = targetProfile.invoices.reduce((sum, inv) => sum + inv.amount, 0);
-          const refundedAmount = targetProfile.depositRefundedAmount || 0;
-          const previouslyDeducted = targetProfile.depositDeductionAmount || 0;
-          const pendingRecoveries = targetProfile.damageRecoveries.reduce((sum, rec) => sum + rec.amount, 0);
-
-          const remainingRefundableDeposit = Math.max(0, collectedDeposit - refundedAmount - previouslyDeducted - pendingRecoveries);
-
-          if (totalCost > remainingRefundableDeposit) {
-            throw new Error(`Recovery amount of ₹${totalCost.toLocaleString('en-IN')} exceeds the remaining refundable deposit of ₹${remainingRefundableDeposit.toLocaleString('en-IN')} for method DEPOSIT.`);
-          }
+          depositDeduction = Math.min(totalCost, remainingRefundableDeposit);
+          outstanding = totalCost - depositDeduction;
+          recoveryStatus = outstanding > 0 ? (depositDeduction > 0 ? 'PARTIALLY_RECOVERED' : 'PENDING') : 'FULLY_RECOVERED';
         }
 
         // Create DamageRecovery entry
@@ -142,10 +146,14 @@ export class ResolveComplaintWorkflow {
             roomId: targetProfile.roomId,
             bedId: targetProfile.bedId,
             amount: totalCost,
+            amountReceived: depositDeduction,
+            totalAmount: totalCost,
+            recoveredAmount: depositDeduction,
+            outstandingAmount: outstanding,
             reason: complaint.description || 'Damage Recovery',
             resolutionNotes,
             attachmentUrls: billUrl ? [billUrl] : [],
-            status: 'PENDING',
+            status: recoveryStatus,
             recoveryMethod: recoveryMethodInput,
             createdBy: actorId,
             items: {
@@ -157,6 +165,90 @@ export class ResolveComplaintWorkflow {
             }
           }
         });
+
+        // Audit log for recovery creation
+        await tx.auditLog.create({
+          data: {
+            actorId,
+            action: 'RECOVERY_CREATED',
+            entityType: 'DamageRecovery',
+            entityId: recovery.id,
+            metadata: {
+              timestamp: new Date(),
+              user: actorId,
+              action: 'RECOVERY_CREATED',
+              entity: 'DamageRecovery',
+              oldValue: null,
+              newValue: {
+                id: recovery.id,
+                totalAmount: totalCost,
+                recoveredAmount: depositDeduction,
+                outstandingAmount: outstanding,
+                status: recoveryStatus,
+                recoveryMethod: recoveryMethodInput
+              }
+            }
+          }
+        });
+
+        // If DEPOSIT deduction occurred, update profile & log transactions
+        if (depositDeduction > 0) {
+          // Increment profile's depositDeductionAmount
+          await tx.pGTenantProfile.update({
+            where: { id: targetTenantId },
+            data: {
+              depositDeductionAmount: previouslyDeducted + depositDeduction,
+              updatedBy: actorId
+            }
+          });
+
+          // Generate DepositLedgerTransaction
+          const depositTx = await tx.depositLedgerTransaction.create({
+            data: {
+              tenantProfileId: targetTenantId,
+              recoveryId: recovery.id,
+              complaintId: complaint.id,
+              type: 'DEPOSIT_DEDUCTION',
+              amount: depositDeduction,
+              reason: complaint.description || 'Damage Deduction',
+              notes: resolutionNotes || null,
+              createdBy: actorId
+            }
+          });
+
+          // Generate RecoveryTransaction
+          await tx.recoveryTransaction.create({
+            data: {
+              recoveryId: recovery.id,
+              amount: depositDeduction,
+              paymentMethod: 'DEPOSIT',
+              notes: 'Automatically deducted from security deposit',
+              createdBy: actorId
+            }
+          });
+
+          // Audit log for deposit deduction
+          await tx.auditLog.create({
+            data: {
+              actorId,
+              action: 'DEPOSIT_DEDUCTED',
+              entityType: 'DepositLedgerTransaction',
+              entityId: depositTx.id,
+              metadata: {
+                timestamp: new Date(),
+                user: actorId,
+                action: 'DEPOSIT_DEDUCTED',
+                entity: 'DepositLedgerTransaction',
+                oldValue: null,
+                newValue: {
+                  tenantProfileId: targetTenantId,
+                  amount: depositDeduction,
+                  reason: complaint.description || 'Damage Deduction'
+                }
+              }
+            }
+          });
+        }
       } else if (responsibility === 'ENTIRE_ROOM') {
         // Fetch all active/notice room occupants
         const occupants = await tx.pGTenantProfile.findMany({
@@ -194,22 +286,26 @@ export class ResolveComplaintWorkflow {
             throw new Error(`Room occupant stay profile (${occupant.id}) is LOCKED. Recovery cannot be attached.`);
           }
 
-          // Rule 4: If method is DEPOSIT, check remaining deposit balance
+          // Calculate remaining deposit balance for this roommate independently
+          const collectedDeposit = occupant.invoices.reduce((sum, inv) => sum + inv.amount, 0);
+          const refundedAmount = occupant.depositRefundedAmount || 0;
+          const previouslyDeducted = occupant.depositDeductionAmount || 0;
+          const pendingRecoveries = occupant.damageRecoveries.reduce((sum, rec) => sum + rec.amount, 0);
+
+          const remainingRefundableDeposit = Math.max(0, collectedDeposit - refundedAmount - previouslyDeducted - pendingRecoveries);
+
+          let depositDeduction = 0;
+          let outstanding = splitCost;
+          let recoveryStatus = 'PENDING';
+
           if (recoveryMethodInput === 'DEPOSIT') {
-            const collectedDeposit = occupant.invoices.reduce((sum, inv) => sum + inv.amount, 0);
-            const refundedAmount = occupant.depositRefundedAmount || 0;
-            const previouslyDeducted = occupant.depositDeductionAmount || 0;
-            const pendingRecoveries = occupant.damageRecoveries.reduce((sum, rec) => sum + rec.amount, 0);
-
-            const remainingRefundableDeposit = Math.max(0, collectedDeposit - refundedAmount - previouslyDeducted - pendingRecoveries);
-
-            if (splitCost > remainingRefundableDeposit) {
-              throw new Error(`Split recovery cost of ₹${splitCost.toLocaleString('en-IN')} exceeds the remaining refundable deposit of ₹${remainingRefundableDeposit.toLocaleString('en-IN')} for room occupant.`);
-            }
+            depositDeduction = Math.min(splitCost, remainingRefundableDeposit);
+            outstanding = splitCost - depositDeduction;
+            recoveryStatus = outstanding > 0 ? (depositDeduction > 0 ? 'PARTIALLY_RECOVERED' : 'PENDING') : 'FULLY_RECOVERED';
           }
 
-          // Create split DamageRecovery entry
-          await tx.damageRecovery.create({
+          // Create occupant's DamageRecovery entry
+          const recovery = await tx.damageRecovery.create({
             data: {
               pgId,
               complaintId: complaint.id,
@@ -217,10 +313,14 @@ export class ResolveComplaintWorkflow {
               roomId: occupant.roomId,
               bedId: occupant.bedId,
               amount: splitCost,
+              amountReceived: depositDeduction,
+              totalAmount: splitCost,
+              recoveredAmount: depositDeduction,
+              outstandingAmount: outstanding,
               reason: `Room Shared Damage Split: ${complaint.description || 'Damage'}`,
               resolutionNotes,
               attachmentUrls: billUrl ? [billUrl] : [],
-              status: 'PENDING',
+              status: recoveryStatus,
               recoveryMethod: recoveryMethodInput,
               createdBy: actorId,
               items: {
@@ -232,6 +332,90 @@ export class ResolveComplaintWorkflow {
               }
             }
           });
+
+          // Audit log for recovery creation
+          await tx.auditLog.create({
+            data: {
+              actorId,
+              action: 'RECOVERY_CREATED',
+              entityType: 'DamageRecovery',
+              entityId: recovery.id,
+              metadata: {
+                timestamp: new Date(),
+                user: actorId,
+                action: 'RECOVERY_CREATED',
+                entity: 'DamageRecovery',
+                oldValue: null,
+                newValue: {
+                  id: recovery.id,
+                  totalAmount: splitCost,
+                  recoveredAmount: depositDeduction,
+                  outstandingAmount: outstanding,
+                  status: recoveryStatus,
+                  recoveryMethod: recoveryMethodInput
+                }
+              }
+            }
+          });
+
+          // If DEPOSIT deduction occurred, update profile & log transactions
+          if (depositDeduction > 0) {
+            // Increment profile's depositDeductionAmount
+            await tx.pGTenantProfile.update({
+              where: { id: occupant.id },
+              data: {
+                depositDeductionAmount: previouslyDeducted + depositDeduction,
+                updatedBy: actorId
+              }
+            });
+
+            // Generate DepositLedgerTransaction
+            const depositTx = await tx.depositLedgerTransaction.create({
+              data: {
+                tenantProfileId: occupant.id,
+                recoveryId: recovery.id,
+                complaintId: complaint.id,
+                type: 'DEPOSIT_DEDUCTION',
+                amount: depositDeduction,
+                reason: `Room Split Damage: ${complaint.description || 'Damage'}`,
+                notes: resolutionNotes || null,
+                createdBy: actorId
+              }
+            });
+
+            // Generate RecoveryTransaction
+            await tx.recoveryTransaction.create({
+              data: {
+                recoveryId: recovery.id,
+                amount: depositDeduction,
+                paymentMethod: 'DEPOSIT',
+                notes: 'Automatically deducted from security deposit',
+                createdBy: actorId
+              }
+            });
+
+            // Audit log for deposit deduction
+            await tx.auditLog.create({
+              data: {
+                actorId,
+                action: 'DEPOSIT_DEDUCTED',
+                entityType: 'DepositLedgerTransaction',
+                entityId: depositTx.id,
+                metadata: {
+                  timestamp: new Date(),
+                  user: actorId,
+                  action: 'DEPOSIT_DEDUCTED',
+                  entity: 'DepositLedgerTransaction',
+                  oldValue: null,
+                  newValue: {
+                    tenantProfileId: occupant.id,
+                    amount: depositDeduction,
+                    reason: `Room Split Damage: ${complaint.description || 'Damage'}`
+                  }
+                }
+              }
+            });
+          }
         }
       }
 

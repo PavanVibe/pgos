@@ -23,7 +23,8 @@ import {
   getRecoveriesLedger,
   getDamageRecoveryDashboard,
   updateRecoveryStatus,
-  lockStaySettlement
+  lockStaySettlement,
+  getRecoveryAuditLogs
 } from '../controllers/recoveriesController';
 import dashboardRoutes from './dashboardRoutes';
 import { getDashboardSummary } from '../controllers/dashboardController';
@@ -66,6 +67,7 @@ router.get('/:pgId/complaints/:complaintId', canAccessPG, getPGComplaint);
 router.get('/:pgId/recoveries/ledger', canAccessPG, getRecoveriesLedger);
 router.get('/:pgId/recoveries/dashboard', canAccessPG, getDamageRecoveryDashboard);
 router.post('/:pgId/recoveries/:recoveryId/status', canAccessPG, updateRecoveryStatus);
+router.get('/:pgId/recoveries/:recoveryId/audit-logs', canAccessPG, getRecoveryAuditLogs);
 router.post('/:pgId/tenants/:tenantId/lock-settlement', canAccessPG, lockStaySettlement);
 
 // Automation & Notifications Manual Triggers

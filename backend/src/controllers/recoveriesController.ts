@@ -43,6 +43,12 @@ export const getRecoveriesLedger = async (req: Request, res: Response) => {
           }
         },
         items: true,
+        depositTransactions: {
+          orderBy: { createdAt: 'desc' }
+        },
+        recoveryTransactions: {
+          orderBy: { createdAt: 'desc' }
+        },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -59,10 +65,10 @@ export const getRecoveriesLedger = async (req: Request, res: Response) => {
         complaintTitle: rec.complaint?.description || rec.reason || 'Damage Recovery',
         complaintDate: rec.complaint?.createdAt || null,
         resolutionDate: rec.complaint?.resolvedAt || null,
-        amount: rec.amount,
-        collectedAmount: rec.amountReceived,
-        outstandingAmount: Math.max(0, rec.amount - rec.amountReceived),
-        status: rec.status, // PENDING, ACCEPTED, DISPUTED, RECOVERED, WAIVED, REFUNDED
+        amount: rec.totalAmount,
+        collectedAmount: rec.recoveredAmount,
+        outstandingAmount: rec.outstandingAmount,
+        status: rec.status, // PENDING, PARTIALLY_RECOVERED, FULLY_RECOVERED, WAIVED, DISPUTED
         recoveryMethod: rec.recoveryMethod, // DEPOSIT, CASH, UPI, WAIVED
         settlementStatus: tenant?.settlementStatus || 'OPEN',
         date: rec.createdAt,
@@ -74,7 +80,9 @@ export const getRecoveriesLedger = async (req: Request, res: Response) => {
           title: item.title,
           amount: item.amount,
           notes: item.notes
-        }))
+        })),
+        depositTransactions: rec.depositTransactions || [],
+        recoveryTransactions: rec.recoveryTransactions || []
       };
     });
 
@@ -96,57 +104,67 @@ export const getDamageRecoveryDashboard = async (req: Request, res: Response) =>
 
     const [
       pendingData,
-      recoveredData,
+      partialData,
+      fullyRecoveredData,
       waivedData,
       disputedData,
       totalSum
     ] = await Promise.all([
       // Pending
       prisma.damageRecovery.aggregate({
-        where: { pgId, status: { in: ['PENDING', 'ACCEPTED'] } },
+        where: { pgId, status: 'PENDING' },
         _count: { id: true },
-        _sum: { amount: true }
+        _sum: { outstandingAmount: true }
       }),
-      // Recovered
+      // Partially Recovered
       prisma.damageRecovery.aggregate({
-        where: { pgId, status: 'RECOVERED' },
+        where: { pgId, status: 'PARTIALLY_RECOVERED' },
         _count: { id: true },
-        _sum: { amountReceived: true, amount: true }
+        _sum: { outstandingAmount: true }
+      }),
+      // Fully Recovered
+      prisma.damageRecovery.aggregate({
+        where: { pgId, status: 'FULLY_RECOVERED' },
+        _count: { id: true },
+        _sum: { recoveredAmount: true }
       }),
       // Waived
       prisma.damageRecovery.aggregate({
         where: { pgId, status: 'WAIVED' },
         _count: { id: true },
-        _sum: { amount: true }
+        _sum: { totalAmount: true }
       }),
       // Disputed
       prisma.damageRecovery.aggregate({
         where: { pgId, status: 'DISPUTED' },
         _count: { id: true },
-        _sum: { amount: true }
+        _sum: { outstandingAmount: true }
       }),
       // All
       prisma.damageRecovery.aggregate({
         where: { pgId },
-        _sum: { amount: true, amountReceived: true }
+        _sum: { totalAmount: true, recoveredAmount: true, outstandingAmount: true }
       })
     ]);
 
-    const totalDamageAmount = totalSum._sum.amount || 0;
-    const totalRecoveredAmount = totalSum._sum.amountReceived || 0;
-    const totalOutstandingAmount = Math.max(0, totalDamageAmount - totalRecoveredAmount - (waivedData._sum.amount || 0));
+    const totalDamageAmount = totalSum._sum.totalAmount || 0;
+    const totalRecoveredAmount = totalSum._sum.recoveredAmount || 0;
+    const waivedAmount = waivedData._sum.totalAmount || 0;
+    const totalOutstandingAmount = Math.max(0, totalSum._sum.outstandingAmount || 0);
 
     res.status(200).json({
       status: 'success',
       data: {
         pendingRecoveriesCount: pendingData._count.id || 0,
-        pendingRecoveriesAmount: pendingData._sum.amount || 0,
-        recoveredCount: recoveredData._count.id || 0,
-        recoveredAmount: recoveredData._sum.amountReceived || 0,
+        pendingRecoveriesAmount: pendingData._sum.outstandingAmount || 0,
+        partiallyRecoveredCount: partialData._count.id || 0,
+        partiallyRecoveredAmount: partialData._sum.outstandingAmount || 0,
+        fullyRecoveredCount: fullyRecoveredData._count.id || 0,
+        fullyRecoveredAmount: fullyRecoveredData._sum.recoveredAmount || 0,
         waivedCount: waivedData._count.id || 0,
-        waivedAmount: waivedData._sum.amount || 0,
+        waivedAmount,
         disputedCount: disputedData._count.id || 0,
-        disputedAmount: disputedData._sum.amount || 0,
+        disputedAmount: disputedData._sum.outstandingAmount || 0,
         totalDamageAmount,
         totalRecoveredAmount,
         totalOutstandingAmount
@@ -195,41 +213,253 @@ export const updateRecoveryStatus = async (req: Request, res: Response) => {
       let finalRecoveryMethod = recoveryMethod || recovery.recoveryMethod;
       
       const updateData: any = {
-        status: newStatus,
-        recoveryMethod: finalRecoveryMethod,
         updatedAt: new Date()
       };
+
+      // Load target profile details for calculations
+      const targetProfile = await tx.pGTenantProfile.findUnique({
+        where: { id: recovery.tenantId },
+        include: {
+          invoices: {
+            where: {
+              type: 'SECURITY_DEPOSIT',
+              status: 'PAID',
+              isActive: true
+            }
+          },
+          damageRecoveries: {
+            where: {
+              status: { in: ['PENDING', 'PARTIALLY_RECOVERED'] },
+              recoveryMethod: 'DEPOSIT'
+            }
+          }
+        }
+      });
+
+      if (!targetProfile) {
+        throw new Error('Target resident profile not found.');
+      }
 
       // Handle transitions
       if (newStatus === 'ACCEPTED') {
         updateData.acceptedAt = new Date();
         updateData.acceptedBy = actorId;
+        
+        await tx.auditLog.create({
+          data: {
+            actorId,
+            action: 'STATUS_CHANGED',
+            entityType: 'DamageRecovery',
+            entityId: recovery.id,
+            metadata: {
+              timestamp: new Date(),
+              user: actorId,
+              action: 'STATUS_CHANGED',
+              entity: 'DamageRecovery',
+              oldValue: oldStatus,
+              newValue: 'ACCEPTED'
+            }
+          }
+        });
       } else if (newStatus === 'DISPUTED') {
+        updateData.status = 'DISPUTED';
         updateData.disputedAt = new Date();
         updateData.disputeReason = reason || 'Disputed by tenant';
+
+        await tx.auditLog.create({
+          data: {
+            actorId,
+            action: 'DISPUTED',
+            entityType: 'DamageRecovery',
+            entityId: recovery.id,
+            metadata: {
+              timestamp: new Date(),
+              user: actorId,
+              action: 'DISPUTED',
+              entity: 'DamageRecovery',
+              oldValue: oldStatus,
+              newValue: 'DISPUTED'
+            }
+          }
+        });
       } else if (newStatus === 'WAIVED') {
+        updateData.status = 'WAIVED';
         updateData.waivedAt = new Date();
         updateData.waivedReason = reason || 'Waived by management';
         updateData.recoveryMethod = 'WAIVED';
         finalRecoveryMethod = 'WAIVED';
-      } else if (newStatus === 'RECOVERED') {
+
+        const remainingToWaive = Math.max(0, recovery.totalAmount - recovery.recoveredAmount);
+        updateData.outstandingAmount = 0;
+
+        if (remainingToWaive > 0) {
+          // Log waived recovery transaction
+          await tx.recoveryTransaction.create({
+            data: {
+              recoveryId: recovery.id,
+              amount: remainingToWaive,
+              paymentMethod: 'WAIVED',
+              notes: reason || 'Waived by management',
+              createdBy: actorId
+            }
+          });
+        }
+
+        await tx.auditLog.create({
+          data: {
+            actorId,
+            action: 'WAIVED',
+            entityType: 'DamageRecovery',
+            entityId: recovery.id,
+            metadata: {
+              timestamp: new Date(),
+              user: actorId,
+              action: 'WAIVED',
+              entity: 'DamageRecovery',
+              oldValue: { status: oldStatus, outstandingAmount: recovery.outstandingAmount },
+              newValue: { status: 'WAIVED', outstandingAmount: 0 }
+            }
+          }
+        });
+      } else if (newStatus === 'RECOVERED' || newStatus === 'FULLY_RECOVERED' || newStatus === 'PARTIALLY_RECOVERED' || amountReceived !== undefined) {
+        const parsedAmount = amountReceived !== undefined ? parseFloat(amountReceived) : (recovery.totalAmount - recovery.recoveredAmount);
+        const toAdd = parsedAmount;
+        const finalRecovered = recovery.recoveredAmount + toAdd;
+        const finalOutstanding = Math.max(0, recovery.totalAmount - finalRecovered);
+
+        updateData.recoveredAmount = finalRecovered;
+        updateData.outstandingAmount = finalOutstanding;
+        updateData.amountReceived = finalRecovered; // backward compatibility
+
+        // Automatic status normalization
+        if (finalOutstanding === 0) {
+          updateData.status = 'FULLY_RECOVERED';
+        } else if (finalRecovered > 0) {
+          updateData.status = 'PARTIALLY_RECOVERED';
+        } else {
+          updateData.status = 'PENDING';
+        }
+
         updateData.collectedDate = new Date();
-        updateData.amountReceived = amountReceived !== undefined ? parseFloat(amountReceived) : recovery.amount;
         updateData.paymentMode = paymentMode || recovery.paymentMode || 'CASH';
         updateData.referenceNumber = referenceNumber || recovery.referenceNumber;
         updateData.collectionNotes = notes || recovery.collectionNotes;
-        
-        // If recoveryMethod is DEPOSIT, update the depositDeductionAmount structurally!
-        if (finalRecoveryMethod === 'DEPOSIT') {
-          const targetProfile = recovery.tenantProfile;
-          const currentDeductions = targetProfile.depositDeductionAmount || 0;
-          const newDeductions = currentDeductions + updateData.amountReceived;
 
+        // Log Recovery Payment Transaction
+        await tx.recoveryTransaction.create({
+          data: {
+            recoveryId: recovery.id,
+            amount: toAdd,
+            paymentMethod: paymentMode || 'CASH',
+            referenceNumber: referenceNumber || null,
+            notes: notes || null,
+            createdBy: actorId
+          }
+        });
+
+        // Audit Log for the recovery collection action
+        const actionName = paymentMode === 'UPI' ? 'UPI_COLLECTED' : (paymentMode === 'DEPOSIT' ? 'DEPOSIT_DEDUCTED' : 'CASH_COLLECTED');
+        await tx.auditLog.create({
+          data: {
+            actorId,
+            action: actionName,
+            entityType: 'DamageRecovery',
+            entityId: recovery.id,
+            metadata: {
+              timestamp: new Date(),
+              user: actorId,
+              action: actionName,
+              entity: 'DamageRecovery',
+              oldValue: {
+                recoveredAmount: recovery.recoveredAmount,
+                outstandingAmount: recovery.outstandingAmount,
+                status: oldStatus
+              },
+              newValue: {
+                recoveredAmount: finalRecovered,
+                outstandingAmount: finalOutstanding,
+                status: updateData.status,
+                paymentMode: paymentMode,
+                referenceNumber: referenceNumber
+              }
+            }
+          }
+        });
+
+        if (oldStatus !== updateData.status) {
+          await tx.auditLog.create({
+            data: {
+              actorId,
+              action: 'STATUS_CHANGED',
+              entityType: 'DamageRecovery',
+              entityId: recovery.id,
+              metadata: {
+                timestamp: new Date(),
+                user: actorId,
+                action: 'STATUS_CHANGED',
+                entity: 'DamageRecovery',
+                oldValue: oldStatus,
+                newValue: updateData.status
+              }
+            }
+          });
+        }
+
+        // Handle DEPOSIT deduction transaction structurally
+        if (paymentMode === 'DEPOSIT') {
+          const collectedDeposit = targetProfile.invoices.reduce((sum, inv) => sum + inv.amount, 0);
+          const refundedAmount = targetProfile.depositRefundedAmount || 0;
+          const previouslyDeducted = targetProfile.depositDeductionAmount || 0;
+          const pendingRecoveries = targetProfile.damageRecoveries.reduce((sum, rec) => sum + rec.amount, 0);
+
+          const remainingRefundableDeposit = Math.max(0, collectedDeposit - refundedAmount - previouslyDeducted - pendingRecoveries);
+
+          if (toAdd > remainingRefundableDeposit) {
+            throw new Error(`Collection exceeds remaining refundable deposit of ₹${remainingRefundableDeposit.toLocaleString('en-IN')}`);
+          }
+
+          // Increment profile's depositDeductionAmount
           await tx.pGTenantProfile.update({
             where: { id: recovery.tenantId },
-            data: { 
-              depositDeductionAmount: newDeductions,
+            data: {
+              depositDeductionAmount: previouslyDeducted + toAdd,
               updatedBy: actorId
+            }
+          });
+
+          // Generate DepositLedgerTransaction
+          const depositTx = await tx.depositLedgerTransaction.create({
+            data: {
+              tenantProfileId: recovery.tenantId,
+              recoveryId: recovery.id,
+              complaintId: recovery.complaintId,
+              type: 'DEPOSIT_DEDUCTION',
+              amount: toAdd,
+              reason: recovery.reason || 'Damage Deduction',
+              notes: notes || null,
+              createdBy: actorId
+            }
+          });
+
+          // Audit log for deposit deduction
+          await tx.auditLog.create({
+            data: {
+              actorId,
+              action: 'DEPOSIT_DEDUCTED',
+              entityType: 'DepositLedgerTransaction',
+              entityId: depositTx.id,
+              metadata: {
+                timestamp: new Date(),
+                user: actorId,
+                action: 'DEPOSIT_DEDUCTED',
+                entity: 'DepositLedgerTransaction',
+                oldValue: null,
+                newValue: {
+                  tenantProfileId: recovery.tenantId,
+                  amount: toAdd,
+                  reason: recovery.reason || 'Damage Deduction'
+                }
+              }
             }
           });
         }
@@ -251,7 +481,7 @@ export const updateRecoveryStatus = async (req: Request, res: Response) => {
             pgId,
             tenantId: recovery.tenantId,
             oldStatus,
-            newStatus,
+            newStatus: updateData.status || recovery.status,
             oldMethod: recovery.recoveryMethod,
             newMethod: finalRecoveryMethod,
             amountReceived: updateData.amountReceived
@@ -297,10 +527,14 @@ export const lockStaySettlement = async (req: Request, res: Response) => {
       await tx.auditLog.create({
         data: {
           actorId,
-          action: 'SETTLEMENT_LOCKED',
+          action: 'SETTLEMENT_COMPLETED',
           entityType: 'PGTenantProfile',
           entityId: tenantId as string,
           metadata: {
+            timestamp: new Date(),
+            user: actorId,
+            action: 'SETTLEMENT_COMPLETED',
+            entity: 'PGTenantProfile',
             oldValue: profile.settlementStatus,
             newValue: 'LOCKED'
           }
@@ -311,6 +545,25 @@ export const lockStaySettlement = async (req: Request, res: Response) => {
     });
 
     res.status(200).json({ status: 'success', data: result });
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+/**
+ * Fetches audit logs for a specific damage recovery entry.
+ */
+export const getRecoveryAuditLogs = async (req: Request, res: Response) => {
+  try {
+    const { recoveryId } = req.params;
+    const logs = await prisma.auditLog.findMany({
+      where: {
+        entityId: recoveryId as string,
+        entityType: 'DamageRecovery'
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+    res.status(200).json({ status: 'success', data: logs });
   } catch (error: any) {
     res.status(400).json({ error: error.message });
   }

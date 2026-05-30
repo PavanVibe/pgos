@@ -120,15 +120,15 @@ export default function ResidentProfileDrawer() {
   // Move-out Settlement Breakdown
   const damageRecoveries = profile?.damageRecoveries || [];
   
-  // 1. Damage Recoveries mapped to DEPOSIT method and marked as RECOVERED (deducted from deposit)
+  // 1. Damage Recoveries mapped to DEPOSIT method and marked as RECOVERED/deducted from deposit
   const depositRecoveriesAmount = damageRecoveries
-    .filter((rec: any) => rec.recoveryMethod === 'DEPOSIT' && rec.status === 'RECOVERED')
-    .reduce((sum: number, rec: any) => sum + rec.amount, 0);
+    .filter((rec: any) => rec.recoveryMethod === 'DEPOSIT')
+    .reduce((sum: number, rec: any) => sum + (rec.recoveredAmount ?? rec.amountReceived ?? 0), 0);
 
-  // 2. Direct Cash/UPI Recoveries marked as RECOVERED
+  // 2. Direct Cash/UPI Recoveries
   const cashUpiRecoveriesAmount = damageRecoveries
-    .filter((rec: any) => (rec.recoveryMethod === 'CASH' || rec.recoveryMethod === 'UPI') && rec.status === 'RECOVERED')
-    .reduce((sum: number, rec: any) => sum + rec.amountReceived, 0);
+    .filter((rec: any) => rec.recoveryMethod === 'CASH' || rec.recoveryMethod === 'UPI')
+    .reduce((sum: number, rec: any) => sum + (rec.recoveredAmount ?? rec.amountReceived ?? 0), 0);
 
   // 3. Waived Recoveries
   const waivedRecoveriesAmount = damageRecoveries
@@ -583,14 +583,21 @@ export default function ResidentProfileDrawer() {
                           <div className="flex justify-between items-center text-[9px] text-zinc-500 font-bold uppercase tracking-wider mt-1.5 pt-1.5 border-t border-zinc-900/60 font-sans">
                             <span>Method: {rec.recoveryMethod}</span>
                             <span className={`font-black
-                              ${rec.status === 'RECOVERED' ? 'text-green-400' : 
+                              ${(rec.status === 'RECOVERED' || rec.status === 'FULLY_RECOVERED') ? 'text-green-400' : 
+                                rec.status === 'PARTIALLY_RECOVERED' ? 'text-blue-400' : 
                                 rec.status === 'DISPUTED' ? 'text-red-400' : 
                                 rec.status === 'WAIVED' ? 'text-zinc-500' : 
                                 'text-amber-400'}`}
                             >
-                              {rec.status}
+                              {rec.status.replace('_', ' ')}
                             </span>
                           </div>
+                          {rec.createdAt && (
+                            <p className="text-[9px] text-zinc-500 mt-1">
+                              Date: {new Date(rec.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                              {rec.referenceNumber && ` | Ref: ${rec.referenceNumber}`}
+                            </p>
+                          )}
                           {rec.disputeReason && (
                             <p className="text-[9px] text-red-400/80 italic mt-1 leading-normal">
                               Dispute: "{rec.disputeReason}"

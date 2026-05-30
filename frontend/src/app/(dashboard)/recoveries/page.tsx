@@ -21,7 +21,8 @@ import {
   Check,
   UserCheck,
   Wallet,
-  Clock
+  Clock,
+  X
 } from 'lucide-react';
 import Link from 'next/link';
 import { toast } from 'sonner';
@@ -46,7 +47,7 @@ interface RecoveryRow {
   amount: number;
   collectedAmount: number;
   outstandingAmount: number;
-  status: 'PENDING' | 'ACCEPTED' | 'DISPUTED' | 'RECOVERED' | 'WAIVED' | 'REFUNDED';
+  status: 'PENDING' | 'ACCEPTED' | 'DISPUTED' | 'PARTIALLY_RECOVERED' | 'FULLY_RECOVERED' | 'WAIVED';
   recoveryMethod: 'DEPOSIT' | 'CASH' | 'UPI' | 'WAIVED';
   settlementStatus: 'OPEN' | 'SETTLED' | 'LOCKED';
   date: string;
@@ -54,6 +55,8 @@ interface RecoveryRow {
   disputeReason: string | null;
   waivedReason: string | null;
   items: RecoveryItem[];
+  depositTransactions: any[];
+  recoveryTransactions: any[];
 }
 
 function RecoveriesLedgerContent() {
@@ -62,17 +65,20 @@ function RecoveriesLedgerContent() {
 
   // Filters State
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'PENDING' | 'ACCEPTED' | 'DISPUTED' | 'RECOVERED' | 'WAIVED'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'PENDING' | 'ACCEPTED' | 'DISPUTED' | 'PARTIALLY_RECOVERED' | 'FULLY_RECOVERED' | 'WAIVED'>('all');
   const [methodFilter, setMethodFilter] = useState<'all' | 'DEPOSIT' | 'CASH' | 'UPI' | 'WAIVED'>('all');
 
   // Modal / Action states
   const [actionRecovery, setActionRecovery] = useState<RecoveryRow | null>(null);
   const [actionType, setActionType] = useState<'DISPUTE' | 'WAIVE' | 'COLLECT' | null>(null);
+
+  // Details Drawer state
+  const [selectedRecoveryForDetails, setSelectedRecoveryForDetails] = useState<RecoveryRow | null>(null);
   
   // Custom inputs for action modals
   const [reasonInput, setReasonInput] = useState('');
   const [amountReceived, setAmountReceived] = useState('');
-  const [paymentMode, setPaymentMode] = useState<'CASH' | 'UPI'>('UPI');
+  const [paymentMode, setPaymentMode] = useState<'CASH' | 'UPI' | 'DEPOSIT'>('UPI');
   const [referenceNumber, setReferenceNumber] = useState('');
   const [notes, setNotes] = useState('');
 
@@ -90,10 +96,22 @@ function RecoveriesLedgerContent() {
     enabled: !!activePgId,
   });
 
+  // Fetch Audit Logs for Selected Recovery Drawer
+  const { data: auditLogsResponse, isLoading: isLoadingAuditLogs } = useQuery({
+    queryKey: ['recovery-audit-logs', selectedRecoveryForDetails?.id, activePgId],
+    queryFn: () => fetchApi(`/pgs/${activePgId}/recoveries/${selectedRecoveryForDetails?.id}/audit-logs`),
+    enabled: !!selectedRecoveryForDetails?.id && !!activePgId,
+  });
+  const auditLogs = auditLogsResponse?.data || [];
+
   const ledgerData: RecoveryRow[] = ledgerResponse?.data || [];
   const stats = statsResponse?.data || {
     pendingRecoveriesCount: 0,
     pendingRecoveriesAmount: 0,
+    partiallyRecoveredCount: 0,
+    partiallyRecoveredAmount: 0,
+    fullyRecoveredCount: 0,
+    fullyRecoveredAmount: 0,
     recoveredCount: 0,
     recoveredAmount: 0,
     waivedCount: 0,
@@ -113,11 +131,17 @@ function RecoveriesLedgerContent() {
         body: JSON.stringify(body)
       });
     },
-    onSuccess: () => {
+    onSuccess: (res: any) => {
       toast.success('Damage recovery record updated successfully.');
       queryClient.invalidateQueries({ queryKey: ['recoveries-ledger', activePgId] });
       queryClient.invalidateQueries({ queryKey: ['recoveries-dashboard', activePgId] });
       queryClient.invalidateQueries({ queryKey: ['deposit-ledger', activePgId] });
+      if (selectedRecoveryForDetails && actionRecovery && selectedRecoveryForDetails.id === actionRecovery.id) {
+        queryClient.invalidateQueries({ queryKey: ['recovery-audit-logs', selectedRecoveryForDetails.id, activePgId] });
+        if (res?.data) {
+          setSelectedRecoveryForDetails(prev => prev ? { ...prev, ...res.data } : null);
+        }
+      }
       closeActionModal();
     },
     onError: (err: any) => {
@@ -133,11 +157,17 @@ function RecoveriesLedgerContent() {
         body: JSON.stringify(body)
       });
     },
-    onSuccess: () => {
+    onSuccess: (res: any, variables) => {
       toast.success('Recovery updated successfully.');
       queryClient.invalidateQueries({ queryKey: ['recoveries-ledger', activePgId] });
       queryClient.invalidateQueries({ queryKey: ['recoveries-dashboard', activePgId] });
       queryClient.invalidateQueries({ queryKey: ['deposit-ledger', activePgId] });
+      if (selectedRecoveryForDetails && selectedRecoveryForDetails.id === variables.recoveryId) {
+        queryClient.invalidateQueries({ queryKey: ['recovery-audit-logs', selectedRecoveryForDetails.id, activePgId] });
+        if (res?.data) {
+          setSelectedRecoveryForDetails(prev => prev ? { ...prev, ...res.data } : null);
+        }
+      }
     },
     onError: (err: any) => {
       toast.error(err.message || 'Failed to update recovery.');
@@ -234,7 +264,8 @@ function RecoveriesLedgerContent() {
   // Filter ledger rows
   const filteredLedger = ledgerData.filter((row) => {
     if (searchQuery && !row.residentName.toLowerCase().includes(searchQuery.toLowerCase())) return false;
-    if (statusFilter !== 'all' && row.status !== statusFilter) return false;
+    const normalizedStatus = row.status as string === 'RECOVERED' ? 'FULLY_RECOVERED' : row.status;
+    if (statusFilter !== 'all' && normalizedStatus !== statusFilter) return false;
     if (methodFilter !== 'all' && row.recoveryMethod !== methodFilter) return false;
     return true;
   });
@@ -242,9 +273,16 @@ function RecoveriesLedgerContent() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'RECOVERED':
+      case 'FULLY_RECOVERED':
         return (
           <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-green-500/10 text-green-400 border border-green-500/20">
-            <CheckCircle2 className="h-3 w-3" /> RECOVERED
+            <CheckCircle2 className="h-3 w-3" /> FULLY RECOVERED
+          </span>
+        );
+      case 'PARTIALLY_RECOVERED':
+        return (
+          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20">
+            <Clock className="h-3 w-3" /> PARTIAL
           </span>
         );
       case 'WAIVED':
@@ -354,44 +392,89 @@ function RecoveriesLedgerContent() {
       </div>
 
       {/* Summary Aggregate Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {/* Total Damage Value */}
         <Card className="border border-zinc-900 bg-zinc-950/20 hover:border-zinc-850 transition-all duration-300">
-          <CardContent className="pt-6 space-y-1">
-            <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block">Outstanding Liabilities</span>
-            <span className="text-3xl font-black text-amber-400 block">
-              ₹{stats.totalOutstandingAmount.toLocaleString('en-IN')}
+          <CardContent className="pt-4 pb-4 space-y-1">
+            <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider block">Total Damage Value</span>
+            <span className="text-2xl font-black text-white block">
+              ₹{(stats.totalDamageAmount || 0).toLocaleString('en-IN')}
             </span>
-            <span className="text-[11px] text-zinc-500 block">{stats.pendingRecoveriesCount} Pending/Accepted Recoveries.</span>
           </CardContent>
         </Card>
 
+        {/* Outstanding Recovery Amount */}
         <Card className="border border-zinc-900 bg-zinc-950/20 hover:border-zinc-850 transition-all duration-300">
-          <CardContent className="pt-6 space-y-1">
-            <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block">Recovered Amount</span>
-            <span className="text-3xl font-black text-green-400 block">
-              ₹{stats.totalRecoveredAmount.toLocaleString('en-IN')}
+          <CardContent className="pt-4 pb-4 space-y-1">
+            <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider block">Outstanding Recovery</span>
+            <span className="text-2xl font-black text-amber-400 block">
+              ₹{(stats.totalOutstandingAmount || 0).toLocaleString('en-IN')}
             </span>
-            <span className="text-[11px] text-zinc-500 block">{stats.recoveredCount} Recoveries settled.</span>
           </CardContent>
         </Card>
 
+        {/* Recovered Amount */}
         <Card className="border border-zinc-900 bg-zinc-950/20 hover:border-zinc-850 transition-all duration-300">
-          <CardContent className="pt-6 space-y-1">
-            <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block">Disputed Liabilities</span>
-            <span className="text-3xl font-black text-red-400 block">
-              ₹{stats.disputedAmount.toLocaleString('en-IN')}
+          <CardContent className="pt-4 pb-4 space-y-1">
+            <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider block">Total Recovered</span>
+            <span className="text-2xl font-black text-green-400 block">
+              ₹{(stats.totalRecoveredAmount || 0).toLocaleString('en-IN')}
             </span>
-            <span className="text-[11px] text-zinc-500 block">{stats.disputedCount} Active Tenant disputes.</span>
           </CardContent>
         </Card>
 
+        {/* Pending Recoveries */}
         <Card className="border border-zinc-900 bg-zinc-950/20 hover:border-zinc-850 transition-all duration-300">
-          <CardContent className="pt-6 space-y-1">
-            <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block">Waived Damages</span>
-            <span className="text-3xl font-black text-zinc-400 block">
-              ₹{stats.waivedAmount.toLocaleString('en-IN')}
+          <CardContent className="pt-4 pb-4 space-y-1">
+            <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider block">Pending Recoveries</span>
+            <span className="text-2xl font-black text-purple-400 block">
+              ₹{(stats.pendingRecoveriesAmount || 0).toLocaleString('en-IN')}
             </span>
-            <span className="text-[11px] text-zinc-500 block">{stats.waivedCount} Cases waived by admin.</span>
+            <span className="text-[10px] text-zinc-500 block">{stats.pendingRecoveriesCount} Pending cases.</span>
+          </CardContent>
+        </Card>
+
+        {/* Partially Recovered */}
+        <Card className="border border-zinc-900 bg-zinc-950/20 hover:border-zinc-850 transition-all duration-300">
+          <CardContent className="pt-4 pb-4 space-y-1">
+            <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider block">Partially Recovered</span>
+            <span className="text-2xl font-black text-blue-400 block">
+              ₹{(stats.partiallyRecoveredAmount || 0).toLocaleString('en-IN')}
+            </span>
+            <span className="text-[10px] text-zinc-500 block">{stats.partiallyRecoveredCount || 0} Partial cases.</span>
+          </CardContent>
+        </Card>
+
+        {/* Fully Recovered */}
+        <Card className="border border-zinc-900 bg-zinc-950/20 hover:border-zinc-850 transition-all duration-300">
+          <CardContent className="pt-4 pb-4 space-y-1">
+            <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider block">Fully Recovered</span>
+            <span className="text-2xl font-black text-green-400 block">
+              ₹{(stats.fullyRecoveredAmount || 0).toLocaleString('en-IN')}
+            </span>
+            <span className="text-[10px] text-zinc-500 block">{stats.fullyRecoveredCount || 0} Fully settled.</span>
+          </CardContent>
+        </Card>
+
+        {/* Waived Damages */}
+        <Card className="border border-zinc-900 bg-zinc-950/20 hover:border-zinc-850 transition-all duration-300">
+          <CardContent className="pt-4 pb-4 space-y-1">
+            <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider block">Waived Damages</span>
+            <span className="text-2xl font-black text-zinc-400 block">
+              ₹{(stats.waivedAmount || 0).toLocaleString('en-IN')}
+            </span>
+            <span className="text-[10px] text-zinc-500 block">{stats.waivedCount} Cases waived.</span>
+          </CardContent>
+        </Card>
+
+        {/* Disputed Liabilities */}
+        <Card className="border border-zinc-900 bg-zinc-950/20 hover:border-zinc-850 transition-all duration-300">
+          <CardContent className="pt-4 pb-4 space-y-1">
+            <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider block">Disputed Liabilities</span>
+            <span className="text-2xl font-black text-red-400 block">
+              ₹{(stats.disputedAmount || 0).toLocaleString('en-IN')}
+            </span>
+            <span className="text-[10px] text-zinc-500 block">{stats.disputedCount} Active disputes.</span>
           </CardContent>
         </Card>
       </div>
@@ -419,7 +502,8 @@ function RecoveriesLedgerContent() {
             <option value="PENDING">Pending</option>
             <option value="ACCEPTED">Accepted</option>
             <option value="DISPUTED">Disputed</option>
-            <option value="RECOVERED">Recovered</option>
+            <option value="PARTIALLY_RECOVERED">Partially Recovered</option>
+            <option value="FULLY_RECOVERED">Fully Recovered</option>
             <option value="WAIVED">Waived</option>
           </select>
 
@@ -477,7 +561,11 @@ function RecoveriesLedgerContent() {
               {filteredLedger.map((row) => {
                 const isLocked = row.settlementStatus === 'LOCKED';
                 return (
-                  <tr key={row.id} className="hover:bg-zinc-900/10 transition-colors animate-fadeIn">
+                  <tr 
+                    key={row.id} 
+                    className="hover:bg-zinc-900/5 hover:cursor-pointer border-b border-zinc-900/40 transition-colors animate-fadeIn"
+                    onClick={() => setSelectedRecoveryForDetails(row)}
+                  >
                     {/* Resident Name */}
                     <td className="p-4 font-bold text-zinc-200">
                       <div>
@@ -547,7 +635,7 @@ function RecoveriesLedgerContent() {
                     </td>
 
                     {/* Action buttons */}
-                    <td className="p-4 text-right">
+                    <td className="p-4 text-right" onClick={(e) => e.stopPropagation()}>
                       {isLocked ? (
                         <span className="text-[10px] text-zinc-600 font-bold uppercase tracking-wider">Settled & Locked</span>
                       ) : (
@@ -555,19 +643,19 @@ function RecoveriesLedgerContent() {
                           {row.status === 'PENDING' && (
                             <>
                               <button
-                                onClick={() => handleQuickAccept(row)}
+                                onClick={(e) => { e.stopPropagation(); handleQuickAccept(row); }}
                                 className="px-2 py-1 rounded bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 border border-purple-500/30 hover:border-purple-500/50 text-[9px] font-bold uppercase cursor-pointer transition-colors"
                               >
                                 <Check className="h-3.5 w-3.5 inline-block -mt-0.5 mr-0.5" /> Accept
                               </button>
                               <button
-                                onClick={() => handleOpenActionModal(row, 'DISPUTE')}
+                                onClick={(e) => { e.stopPropagation(); handleOpenActionModal(row, 'DISPUTE'); }}
                                 className="px-2 py-1 rounded bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 hover:border-red-500/50 text-[9px] font-bold uppercase cursor-pointer transition-colors"
                               >
                                 Dispute
                               </button>
                               <button
-                                onClick={() => handleOpenActionModal(row, 'WAIVE')}
+                                onClick={(e) => { e.stopPropagation(); handleOpenActionModal(row, 'WAIVE'); }}
                                 className="px-2 py-1 rounded bg-zinc-900 hover:bg-zinc-850 text-zinc-300 border border-zinc-800 hover:border-zinc-700 text-[9px] font-bold uppercase cursor-pointer transition-colors"
                               >
                                 Waive
@@ -578,13 +666,13 @@ function RecoveriesLedgerContent() {
                           {row.status === 'DISPUTED' && (
                             <>
                               <button
-                                onClick={() => handleQuickAccept(row)}
+                                onClick={(e) => { e.stopPropagation(); handleQuickAccept(row); }}
                                 className="px-2 py-1 rounded bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 border border-purple-500/30 hover:border-purple-500/50 text-[9px] font-bold uppercase cursor-pointer transition-colors"
                               >
                                 Accept
                               </button>
                               <button
-                                onClick={() => handleOpenActionModal(row, 'WAIVE')}
+                                onClick={(e) => { e.stopPropagation(); handleOpenActionModal(row, 'WAIVE'); }}
                                 className="px-2 py-1 rounded bg-zinc-900 hover:bg-zinc-850 text-zinc-300 border border-zinc-800 hover:border-zinc-700 text-[9px] font-bold uppercase cursor-pointer transition-colors"
                               >
                                 Waive
@@ -596,14 +684,14 @@ function RecoveriesLedgerContent() {
                             <>
                               {row.recoveryMethod === 'DEPOSIT' ? (
                                 <button
-                                  onClick={() => handleQuickDeductDeposit(row)}
+                                  onClick={(e) => { e.stopPropagation(); handleQuickDeductDeposit(row); }}
                                   className="inline-flex items-center gap-0.5 px-2.5 py-1 rounded border border-blue-900/40 hover:border-blue-800 bg-blue-950/20 hover:bg-blue-950/40 text-[9px] font-bold uppercase text-blue-400 hover:text-blue-350 cursor-pointer transition-colors"
                                 >
                                   <UserCheck className="h-3 w-3" /> Deduct Deposit
                                 </button>
                               ) : (
                                 <button
-                                  onClick={() => handleOpenActionModal(row, 'COLLECT')}
+                                  onClick={(e) => { e.stopPropagation(); handleOpenActionModal(row, 'COLLECT'); }}
                                   className="inline-flex items-center gap-0.5 px-2.5 py-1 rounded border border-green-900/40 hover:border-green-800 bg-green-950/20 hover:bg-green-950/40 text-[9px] font-bold uppercase text-green-400 hover:text-green-350 cursor-pointer transition-colors"
                                 >
                                   <Wallet className="h-3 w-3" /> Collect Payment
@@ -612,8 +700,25 @@ function RecoveriesLedgerContent() {
                             </>
                           )}
 
-                          {(row.status === 'RECOVERED' || row.status === 'WAIVED') && (
-                            <span className="text-zinc-600 text-xs font-semibold select-none">-</span>
+                          {row.status === 'PARTIALLY_RECOVERED' && (
+                            <div className="flex gap-1.5 justify-end">
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleOpenActionModal(row, 'COLLECT'); }}
+                                className="inline-flex items-center gap-0.5 px-2 py-1 rounded border border-green-900/40 hover:border-green-800 bg-green-950/20 hover:bg-green-950/40 text-[9px] font-bold uppercase text-green-400 hover:text-green-350 cursor-pointer transition-colors"
+                              >
+                                <Wallet className="h-3 w-3" /> Collect Remaining
+                              </button>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleOpenActionModal(row, 'WAIVE'); }}
+                                className="px-2 py-1 rounded bg-zinc-900 hover:bg-zinc-850 text-zinc-300 border border-zinc-800 hover:border-zinc-700 text-[9px] font-bold uppercase cursor-pointer transition-colors"
+                              >
+                                Waive Remaining
+                              </button>
+                            </div>
+                          )}
+
+                          {(row.status as string === 'FULLY_RECOVERED' || row.status === 'WAIVED') && (
+                            <span className="text-zinc-650 font-semibold select-none">-</span>
                           )}
                         </div>
                       )}
@@ -685,7 +790,7 @@ function RecoveriesLedgerContent() {
 
                     <div className="space-y-1.5">
                       <label className="text-[10px] font-extrabold text-zinc-500 uppercase tracking-wider block">Payment Mode</label>
-                      <div className="grid grid-cols-2 gap-1 bg-black p-0.5 border border-zinc-900 rounded-lg h-9">
+                      <div className="grid grid-cols-3 gap-1 bg-black p-0.5 border border-zinc-900 rounded-lg h-9">
                         <button
                           onClick={() => setPaymentMode('UPI')}
                           className={`text-[10px] font-extrabold rounded ${paymentMode === 'UPI' ? 'bg-zinc-900 text-white border border-zinc-800' : 'text-zinc-500'}`}
@@ -697,6 +802,12 @@ function RecoveriesLedgerContent() {
                           className={`text-[10px] font-extrabold rounded ${paymentMode === 'CASH' ? 'bg-zinc-900 text-white border border-zinc-800' : 'text-zinc-500'}`}
                         >
                           CASH
+                        </button>
+                        <button
+                          onClick={() => setPaymentMode('DEPOSIT')}
+                          className={`text-[10px] font-extrabold rounded ${paymentMode === 'DEPOSIT' ? 'bg-zinc-900 text-white border border-zinc-800' : 'text-zinc-500'}`}
+                        >
+                          DEPOSIT
                         </button>
                       </div>
                     </div>
@@ -741,6 +852,230 @@ function RecoveriesLedgerContent() {
               >
                 Cancel
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Details Drawer */}
+      {selectedRecoveryForDetails && (
+        <div className="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm animate-fadeIn" onClick={() => setSelectedRecoveryForDetails(null)}>
+          <div 
+            className="fixed right-0 top-0 h-full w-full max-w-lg bg-zinc-950 border-l border-zinc-905 shadow-2xl p-6 overflow-y-auto space-y-6 animate-slideInRight"
+            onClick={(e) => e.stopPropagation()}
+            style={{ 
+              boxShadow: '-10px 0 30px rgba(0, 0, 0, 0.5)',
+              transition: 'transform 0.3s ease-in-out'
+            }}
+          >
+            {/* Drawer Header */}
+            <div className="flex justify-between items-start border-b border-zinc-900 pb-4">
+              <div>
+                <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block">Damage Recovery Details</span>
+                <h2 className="text-xl font-black text-white mt-1">{selectedRecoveryForDetails.complaintTitle}</h2>
+                <p className="text-zinc-400 text-xs mt-1">
+                  Resident: <span className="text-zinc-200 font-bold">{selectedRecoveryForDetails.residentName}</span> (Room {selectedRecoveryForDetails.roomNumber})
+                </p>
+              </div>
+              <button 
+                onClick={() => setSelectedRecoveryForDetails(null)}
+                className="p-1 rounded bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* General Info / Financial Summary Card */}
+            <div className="grid grid-cols-3 gap-4 bg-zinc-900/30 border border-zinc-900/80 rounded-2xl p-4">
+              <div className="space-y-1">
+                <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider block">Recovery Cost</span>
+                <span className="text-lg font-black text-white">₹{selectedRecoveryForDetails.amount.toLocaleString('en-IN')}</span>
+              </div>
+              <div className="space-y-1">
+                <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider block">Total Recovered</span>
+                <span className="text-lg font-black text-green-400">₹{selectedRecoveryForDetails.collectedAmount.toLocaleString('en-IN')}</span>
+              </div>
+              <div className="space-y-1">
+                <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider block">Outstanding</span>
+                <span className="text-lg font-black text-amber-400">₹{selectedRecoveryForDetails.outstandingAmount.toLocaleString('en-IN')}</span>
+              </div>
+            </div>
+
+            {/* Status & Method Badges */}
+            <div className="flex items-center gap-3">
+              <div className="flex flex-col gap-1.5">
+                <span className="text-[9px] font-extrabold text-zinc-500 uppercase tracking-wider">Current Status</span>
+                {getStatusBadge(selectedRecoveryForDetails.status)}
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <span className="text-[9px] font-extrabold text-zinc-500 uppercase tracking-wider">Recovery Method</span>
+                {getMethodBadge(selectedRecoveryForDetails.recoveryMethod)}
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <span className="text-[9px] font-extrabold text-zinc-500 uppercase tracking-wider">Settlement Status</span>
+                <span className={`px-2 py-0.5 rounded-full text-[9px] uppercase tracking-wider border font-extrabold w-fit
+                  ${selectedRecoveryForDetails.settlementStatus === 'LOCKED' 
+                    ? 'bg-red-500/10 border-red-500/20 text-red-400 animate-pulse' 
+                    : 'bg-green-500/10 border-green-500/20 text-green-400'}`}
+                >
+                  {selectedRecoveryForDetails.settlementStatus}
+                </span>
+              </div>
+            </div>
+
+            {/* Breakdown Items List */}
+            {selectedRecoveryForDetails.items.length > 0 && (
+              <div className="space-y-2.5">
+                <h3 className="text-xs font-black uppercase text-zinc-400 tracking-wider flex items-center gap-1.5">
+                  <IndianRupee className="h-3.5 w-3.5 text-zinc-500" /> Deduction Items Breakdown
+                </h3>
+                <div className="border border-zinc-900 rounded-xl bg-zinc-950/40 divide-y divide-zinc-900">
+                  {selectedRecoveryForDetails.items.map((item) => (
+                    <div key={item.id} className="p-3 flex justify-between items-center text-xs">
+                      <div>
+                        <span className="font-bold text-zinc-200 block">{item.title}</span>
+                        {item.notes && <span className="text-[10px] text-zinc-500 block mt-0.5">{item.notes}</span>}
+                      </div>
+                      <span className="font-extrabold text-zinc-300">₹{item.amount.toLocaleString('en-IN')}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Recovery Payment Transactions List */}
+            <div className="space-y-2.5">
+              <h3 className="text-xs font-black uppercase text-zinc-400 tracking-wider flex items-center gap-1.5">
+                <Wallet className="h-3.5 w-3.5 text-zinc-500" /> Recovery Transactions Ledger
+              </h3>
+              {selectedRecoveryForDetails.recoveryTransactions.length === 0 ? (
+                <div className="text-xs text-zinc-500 border border-dashed border-zinc-900 rounded-xl p-4 bg-zinc-950/20 text-center">
+                  No payment collections recorded yet.
+                </div>
+              ) : (
+                <div className="border border-zinc-900 rounded-xl bg-zinc-950/40 divide-y divide-zinc-900">
+                  {selectedRecoveryForDetails.recoveryTransactions.map((tx: any) => (
+                    <div key={tx.id} className="p-3 flex justify-between items-start text-xs">
+                      <div>
+                        <span className="font-bold text-zinc-200 block capitalize">{tx.paymentMethod} Payment</span>
+                        {tx.referenceNumber && (
+                          <span className="text-[10px] text-zinc-500 font-medium block mt-0.5">Ref: {tx.referenceNumber}</span>
+                        )}
+                        {tx.notes && (
+                          <span className="text-[10px] text-zinc-400 block mt-1 bg-zinc-900/60 p-1.5 rounded">{tx.notes}</span>
+                        )}
+                      </div>
+                      <div className="text-right">
+                        <span className="font-black text-green-400 block">₹{tx.amount.toLocaleString('en-IN')}</span>
+                        <span className="text-[9px] text-zinc-500 block mt-0.5">
+                          {new Date(tx.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Deposit Deductions List */}
+            {selectedRecoveryForDetails.depositTransactions && selectedRecoveryForDetails.depositTransactions.length > 0 && (
+              <div className="space-y-2.5">
+                <h3 className="text-xs font-black uppercase text-zinc-400 tracking-wider flex items-center gap-1.5">
+                  <ShieldCheck className="h-3.5 w-3.5 text-zinc-500" /> Security Deposit Deductions
+                </h3>
+                <div className="border border-zinc-900 rounded-xl bg-zinc-950/40 divide-y divide-zinc-900">
+                  {selectedRecoveryForDetails.depositTransactions.map((tx: any) => (
+                    <div key={tx.id} className="p-3 flex justify-between items-start text-xs">
+                      <div>
+                        <span className="font-bold text-zinc-200 block">{tx.reason || 'Deposit Deduction'}</span>
+                        {tx.notes && (
+                          <span className="text-[10px] text-zinc-400 block mt-1 bg-zinc-900/60 p-1.5 rounded">{tx.notes}</span>
+                        )}
+                      </div>
+                      <div className="text-right">
+                        <span className="font-black text-blue-400 block">₹{tx.amount.toLocaleString('en-IN')}</span>
+                        <span className="text-[9px] text-zinc-500 block mt-0.5">
+                          {new Date(tx.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Bills & Photos */}
+            {selectedRecoveryForDetails.attachmentUrls && selectedRecoveryForDetails.attachmentUrls.length > 0 && (
+              <div className="space-y-2.5">
+                <h3 className="text-xs font-black uppercase text-zinc-400 tracking-wider">
+                  Attached Bills & Media
+                </h3>
+                <div className="grid grid-cols-2 gap-3">
+                  {selectedRecoveryForDetails.attachmentUrls.map((url: string, idx: number) => {
+                    const isImg = url.match(/\.(jpeg|jpg|gif|png|webp)/i);
+                    return (
+                      <a 
+                        key={idx} 
+                        href={url} 
+                        target="_blank" 
+                        rel="noreferrer"
+                        className="group border border-zinc-900 hover:border-zinc-800 bg-zinc-950/50 hover:bg-zinc-900/40 rounded-xl p-3 flex flex-col items-center justify-center gap-2 text-center transition-all cursor-pointer"
+                      >
+                        {isImg ? (
+                          <img src={url} alt="Attached Receipt" className="h-16 w-16 object-cover rounded-lg bg-zinc-900" />
+                        ) : (
+                          <div className="h-16 w-16 rounded-lg bg-zinc-900 flex items-center justify-center text-zinc-500">
+                            DOC
+                          </div>
+                        )}
+                        <span className="text-[10px] font-bold text-zinc-400 group-hover:text-white transition-colors">
+                          View Attachment {idx + 1}
+                        </span>
+                      </a>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Audit Logs Trail */}
+            <div className="space-y-2.5">
+              <h3 className="text-xs font-black uppercase text-zinc-400 tracking-wider flex items-center gap-1.5">
+                <Clock className="h-3.5 w-3.5 text-zinc-500" /> Audit Logging Trail
+              </h3>
+              {isLoadingAuditLogs ? (
+                <div className="text-xs text-zinc-500 border border-zinc-900/60 rounded-xl p-4 bg-zinc-950/20 text-center animate-pulse">
+                  Loading audit trails...
+                </div>
+              ) : auditLogs.length === 0 ? (
+                <div className="text-xs text-zinc-500 border border-dashed border-zinc-900 rounded-xl p-4 bg-zinc-950/20 text-center">
+                  No audit logs recorded for this recovery.
+                </div>
+              ) : (
+                <div className="space-y-2.5 relative before:absolute before:left-3 before:top-2 before:bottom-2 before:w-0.5 before:bg-zinc-900">
+                  {auditLogs.map((log: any) => (
+                    <div key={log.id} className="pl-7 relative text-xs text-left">
+                      <div className="absolute left-[9px] top-1.5 h-2 w-2 rounded-full bg-purple-500 border border-zinc-950 shadow" />
+                      <div className="bg-zinc-900/20 border border-zinc-900/60 rounded-xl p-3 space-y-1 hover:border-zinc-800 transition-colors">
+                        <div className="flex justify-between items-center text-[10px] text-zinc-500">
+                          <span className="font-extrabold uppercase text-purple-400 tracking-wider">{log.action.replace('_', ' ')}</span>
+                          <span>
+                            {new Date(log.createdAt).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+                        <p className="text-zinc-350 text-[11px]">
+                          Performed by <span className="font-extrabold text-zinc-200">{log.actorId || 'system'}</span>
+                        </p>
+                        {log.metadata && (
+                          <div className="text-[10px] bg-zinc-950/80 p-2 rounded-lg text-zinc-500 font-mono mt-1 max-h-24 overflow-y-auto whitespace-pre-wrap">
+                            {JSON.stringify(log.metadata, null, 2)}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>

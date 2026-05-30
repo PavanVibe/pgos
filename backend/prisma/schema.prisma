@@ -182,6 +182,7 @@ model PGTenantProfile {
   invoices             RentInvoice[]
   complaints           Complaint[]
   damageRecoveries     DamageRecovery[]
+  depositTransactions  DepositLedgerTransaction[]
 
   @@index([globalTenantId])
   @@index([pgId])
@@ -264,6 +265,7 @@ model Complaint {
   pg                 PG                @relation(fields: [pgId], references: [id])
   tenantProfile      PGTenantProfile   @relation(fields: [pgTenantId], references: [id])
   damageRecoveries   DamageRecovery[]
+  depositTransactions DepositLedgerTransaction[]
 
   @@index([pgId])
   @@index([pgTenantId])
@@ -340,7 +342,7 @@ model DamageRecovery {
   reason                String
   resolutionNotes       String?
   attachmentUrls        String[]
-  status                String               @default("PENDING") // PENDING, ACCEPTED, DISPUTED, RECOVERED, WAIVED, REFUNDED
+  status                String               @default("PENDING") // PENDING, PARTIALLY_RECOVERED, FULLY_RECOVERED, WAIVED, DISPUTED
   recoveryMethod        String               @default("DEPOSIT") // DEPOSIT, CASH, UPI, WAIVED
   
   // Recovery Collections Fields
@@ -349,6 +351,11 @@ model DamageRecovery {
   referenceNumber       String?
   collectedDate         DateTime?
   collectionNotes       String?
+
+  // Progress Tracking Fields
+  totalAmount           Float                @default(0)
+  recoveredAmount       Float                @default(0)
+  outstandingAmount     Float                @default(0)
 
   // Dispute & Acknowledgement Fields
   acceptedAt            DateTime?
@@ -367,6 +374,9 @@ model DamageRecovery {
   tenantProfile         PGTenantProfile      @relation(fields: [tenantId], references: [id])
   room                  Room                 @relation(fields: [roomId], references: [id])
   items                 DamageRecoveryItem[]
+  
+  depositTransactions   DepositLedgerTransaction[]
+  recoveryTransactions  RecoveryTransaction[]
 }
 
 model DamageRecoveryItem {
@@ -378,4 +388,34 @@ model DamageRecoveryItem {
   createdAt   DateTime       @default(now())
   
   recovery    DamageRecovery @relation(fields: [recoveryId], references: [id], onDelete: Cascade)
+}
+
+model DepositLedgerTransaction {
+  id              String           @id @default(uuid())
+  tenantProfileId String
+  recoveryId      String?
+  complaintId     String?
+  type            String           // DEPOSIT_COLLECTED, DEPOSIT_DEDUCTION, DEPOSIT_REFUND, MANUAL_ADJUSTMENT
+  amount          Float
+  reason          String
+  notes           String?
+  createdAt       DateTime         @default(now())
+  createdBy       String?
+
+  tenantProfile   PGTenantProfile  @relation(fields: [tenantProfileId], references: [id])
+  recovery        DamageRecovery?  @relation(fields: [recoveryId], references: [id], onDelete: SetNull)
+  complaint       Complaint?       @relation(fields: [complaintId], references: [id], onDelete: SetNull)
+}
+
+model RecoveryTransaction {
+  id              String         @id @default(uuid())
+  recoveryId      String
+  amount          Float
+  paymentMethod   String         // DEPOSIT, UPI, CASH, WAIVED
+  referenceNumber String?
+  notes           String?
+  createdAt       DateTime       @default(now())
+  createdBy       String?
+
+  recovery        DamageRecovery @relation(fields: [recoveryId], references: [id], onDelete: Cascade)
 }
