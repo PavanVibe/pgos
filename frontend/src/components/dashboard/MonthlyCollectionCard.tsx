@@ -2,7 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Calendar, DollarSign, Users, TrendingUp } from "lucide-react";
+import { Calendar, DollarSign, Percent, TrendingUp } from "lucide-react";
 import { fetchApi } from "@/lib/api";
 import { queryKeys } from "@/lib/queryKeys";
 
@@ -23,6 +23,25 @@ export default function MonthlyCollectionCard({ pgId }: { pgId: string }) {
     trendPercentage = parseFloat(((currentMonth - lastMonth) / lastMonth * 100).toFixed(1));
   } else if (currentMonth > 0) {
     trendPercentage = 100;
+  }
+
+  // Collection Rate computation
+  const pendingRent = data?.pendingRent ?? 0;
+  const targetCollection = currentMonth + pendingRent;
+  const collectionRate = targetCollection > 0 ? Math.round((currentMonth / targetCollection) * 100) : 0;
+
+  // Dynamic colors for collection rate
+  let rateColor = 'text-zinc-200';
+  let rateIconColor = 'text-zinc-500';
+  if (collectionRate >= 75) {
+    rateColor = 'text-emerald-400';
+    rateIconColor = 'text-emerald-500/70';
+  } else if (collectionRate >= 50) {
+    rateColor = 'text-amber-400';
+    rateIconColor = 'text-amber-500/70';
+  } else if (collectionRate > 0) {
+    rateColor = 'text-red-400';
+    rateIconColor = 'text-red-500/70';
   }
 
   return (
@@ -64,7 +83,7 @@ export default function MonthlyCollectionCard({ pgId }: { pgId: string }) {
                 <div className={`flex items-center gap-0.5 font-bold px-2 py-0.5 rounded-full text-[10px]
                   ${trendPercentage >= 0 
                     ? 'text-emerald-400 bg-emerald-500/10 border border-emerald-500/20' 
-                    : 'text-red-400 bg-red-500/10 border border-red-500/20'}`}
+                     : 'text-red-400 bg-red-500/10 border border-red-500/20'}`}
                 >
                   <TrendingUp className="h-3 w-3 shrink-0" />
                   {trendPercentage >= 0 ? `+${trendPercentage}%` : `${trendPercentage}%`}
@@ -78,14 +97,14 @@ export default function MonthlyCollectionCard({ pgId }: { pgId: string }) {
               <div>
                 <span className="text-[9px] text-zinc-500 block uppercase font-bold tracking-wider">Pending Rents</span>
                 <span className="text-zinc-200 text-sm font-extrabold mt-0.5">
-                  ₹{(data?.pendingRent ?? 0).toLocaleString('en-IN')}
+                  ₹{pendingRent.toLocaleString('en-IN')}
                 </span>
               </div>
               <div className="border-l border-zinc-900/80 pl-3">
-                <span className="text-[9px] text-zinc-500 block uppercase font-bold tracking-wider">Paying Residents</span>
-                <span className="text-zinc-200 text-sm font-extrabold mt-0.5 flex items-center gap-1.5">
-                  <Users className="h-3.5 w-3.5 text-zinc-500" />
-                  {data?.payingResidentsCount ?? 0}
+                <span className="text-[9px] text-zinc-500 block uppercase font-bold tracking-wider">Collection Rate</span>
+                <span className={`${rateColor} text-sm font-extrabold mt-0.5 flex items-center gap-1.5`}>
+                  <Percent className={`h-3.5 w-3.5 ${rateIconColor}`} />
+                  {collectionRate}%
                 </span>
               </div>
             </div>
