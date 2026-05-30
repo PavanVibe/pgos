@@ -79,6 +79,7 @@ model PG {
   expenses       Expense[]
   complaints     Complaint[]
   tenantProfiles PGTenantProfile[]
+  damageRecoveries DamageRecovery[]
 
   @@index([organizationId])
   @@index([isActive])
@@ -102,6 +103,7 @@ model Room {
   pg             PG                @relation(fields: [pgId], references: [id])
   beds           Bed[]
   tenantProfiles PGTenantProfile[]
+  damageRecoveries DamageRecovery[]
 
   @@index([pgId])
   @@index([isActive])
@@ -161,6 +163,7 @@ model PGTenantProfile {
   depositRefundedAt     DateTime?
   depositRefundMode     String?
   depositRefundNotes    String?
+  settlementStatus      String         @default("OPEN")
   moveInDate           DateTime       @default(now())
   moveOutDate          DateTime?
   
@@ -178,6 +181,7 @@ model PGTenantProfile {
   room                 Room           @relation(fields: [roomId], references: [id])
   invoices             RentInvoice[]
   complaints           Complaint[]
+  damageRecoveries     DamageRecovery[]
 
   @@index([globalTenantId])
   @@index([pgId])
@@ -243,6 +247,12 @@ model Complaint {
   status             ComplaintStatus   @default(PENDING)
   slaDeadline        DateTime
   assignedResolverId String?
+  repairCost         Float?
+  responsibility     String? // SPECIFIC_RESIDENT, ENTIRE_ROOM, OWNER
+  billUrl            String?
+  resolvedImageUrl   String?
+  resolutionNotes    String?
+  resolvedAt         DateTime?
   
   createdBy          String?
   updatedBy          String?
@@ -253,6 +263,7 @@ model Complaint {
   updatedAt          DateTime          @updatedAt
   pg                 PG                @relation(fields: [pgId], references: [id])
   tenantProfile      PGTenantProfile   @relation(fields: [pgTenantId], references: [id])
+  damageRecoveries   DamageRecovery[]
 
   @@index([pgId])
   @@index([pgTenantId])
@@ -316,4 +327,55 @@ model OnboardingAnalytics {
 
   @@index([organizationId])
   @@index([pgId])
+}
+
+model DamageRecovery {
+  id                    String               @id @default(uuid())
+  pgId                  String
+  complaintId           String?
+  tenantId              String
+  roomId                String
+  bedId                 String?
+  amount                Float
+  reason                String
+  resolutionNotes       String?
+  attachmentUrls        String[]
+  status                String               @default("PENDING") // PENDING, ACCEPTED, DISPUTED, RECOVERED, WAIVED, REFUNDED
+  recoveryMethod        String               @default("DEPOSIT") // DEPOSIT, CASH, UPI, WAIVED
+  
+  // Recovery Collections Fields
+  amountReceived        Float                @default(0)
+  paymentMode           String?
+  referenceNumber       String?
+  collectedDate         DateTime?
+  collectionNotes       String?
+
+  // Dispute & Acknowledgement Fields
+  acceptedAt            DateTime?
+  acceptedBy            String?
+  disputedAt            DateTime?
+  disputeReason         String?
+  waivedAt              DateTime?
+  waivedReason          String?
+  
+  createdAt             DateTime             @default(now())
+  createdBy             String?
+  updatedAt             DateTime             @updatedAt
+  
+  pg                    PG                   @relation(fields: [pgId], references: [id])
+  complaint             Complaint?           @relation(fields: [complaintId], references: [id])
+  tenantProfile         PGTenantProfile      @relation(fields: [tenantId], references: [id])
+  room                  Room                 @relation(fields: [roomId], references: [id])
+  items                 DamageRecoveryItem[]
+}
+
+model DamageRecoveryItem {
+  id          String         @id @default(uuid())
+  recoveryId  String
+  title       String
+  amount      Float
+  notes       String?
+  createdAt   DateTime       @default(now())
+  
+  recovery    DamageRecovery @relation(fields: [recoveryId], references: [id], onDelete: Cascade)
 }

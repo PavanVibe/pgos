@@ -18,6 +18,7 @@ import RaiseComplaintSheet from "@/components/complaints/RaiseComplaintSheet";
 import VacateResidentSheet from "@/components/vacate/VacateResidentSheet";
 import OccupancyExplorerSheet from "@/components/dashboard/OccupancyExplorerSheet";
 import ComplaintDrawer from "@/components/complaints/ComplaintDrawer";
+import ResolveComplaintSheet from "@/components/complaints/ResolveComplaintSheet";
 import { Building2, ChevronDown, Plus, Settings } from 'lucide-react';
 import Link from 'next/link';
 
@@ -121,6 +122,7 @@ export default function DashboardPage() {
           <VacateResidentSheet pgId={activePgId} />
           <OccupancyExplorerSheet pgId={activePgId} />
           <ComplaintDrawer />
+          <ResolveComplaintSheet />
         </>
       ) : (
         <div className="h-64 flex flex-col items-center justify-center border border-dashed border-zinc-800 rounded-2xl p-6 bg-zinc-950/20 gap-4">

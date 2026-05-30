@@ -2,14 +2,15 @@
 
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { useResidentProfileStore } from '@/store/useResidentProfileStore';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { fetchApi } from '@/lib/api';
 import { 
   User, Phone, Mail, Calendar, CreditCard, AlertCircle, Clock, ShieldCheck, 
-  MapPin, DollarSign, ListTodo, ClipboardList, ExternalLink, X, Download
+  MapPin, DollarSign, ListTodo, ClipboardList, ExternalLink, X, Download, Lock
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
+import { toast } from 'sonner';
 
 export default function ResidentProfileDrawer() {
   const { isOpen, selectedProfileId, closeProfile } = useResidentProfileStore();
@@ -37,6 +38,26 @@ export default function ResidentProfileDrawer() {
   });
 
   const profile = response?.data;
+  const queryClient = useQueryClient();
+
+  const lockSettlementMutation = useMutation({
+    mutationFn: () => {
+      return fetchApi(`/pgs/${profile?.pgId}/tenants/${profile?.id}/lock-settlement`, {
+        method: 'POST'
+      });
+    },
+    onSuccess: () => {
+      toast.success('Resident stay settlement locked permanently.');
+      queryClient.invalidateQueries({ queryKey: ['residents', 'profile', selectedProfileId] });
+      if (profile?.pgId) {
+        queryClient.invalidateQueries({ queryKey: ['deposit-ledger', profile.pgId] });
+        queryClient.invalidateQueries({ queryKey: ['recoveries-ledger', profile.pgId] });
+      }
+    },
+    onError: (err: any) => {
+      toast.error(err.message || 'Failed to lock stay settlement.');
+    }
+  });
 
   // Helpers to parse stay duration
   const calculateStayDuration = (inDate: string, outDate?: string | null) => {
@@ -95,6 +116,30 @@ export default function ResidentProfileDrawer() {
   const outstandingTotal = invoices
     .filter((inv: any) => inv.status !== 'PAID')
     .reduce((sum: number, inv: any) => sum + inv.amount, 0);
+
+  // Move-out Settlement Breakdown
+  const damageRecoveries = profile?.damageRecoveries || [];
+  
+  // 1. Damage Recoveries mapped to DEPOSIT method and marked as RECOVERED (deducted from deposit)
+  const depositRecoveriesAmount = damageRecoveries
+    .filter((rec: any) => rec.recoveryMethod === 'DEPOSIT' && rec.status === 'RECOVERED')
+    .reduce((sum: number, rec: any) => sum + rec.amount, 0);
+
+  // 2. Direct Cash/UPI Recoveries marked as RECOVERED
+  const cashUpiRecoveriesAmount = damageRecoveries
+    .filter((rec: any) => (rec.recoveryMethod === 'CASH' || rec.recoveryMethod === 'UPI') && rec.status === 'RECOVERED')
+    .reduce((sum: number, rec: any) => sum + rec.amountReceived, 0);
+
+  // 3. Waived Recoveries
+  const waivedRecoveriesAmount = damageRecoveries
+    .filter((rec: any) => rec.status === 'WAIVED')
+    .reduce((sum: number, rec: any) => sum + rec.amount, 0);
+
+  // 4. Total Deductions (deposit deductions amount is stored on profile.depositDeductionAmount)
+  const totalDeductions = profile?.depositDeductionAmount || 0;
+
+  // 5. Final Refundable Deposit
+  const finalRefundableDeposit = Math.max(0, collectedDeposit - (profile?.depositRefundedAmount || 0) - totalDeductions);
 
   // Status mapping
   const getDepositStatusLabel = () => {
@@ -466,6 +511,102 @@ export default function ResidentProfileDrawer() {
                   </div>
                 </div>
 
+                {/* MOVE-OUT SETTLEMENT BREAKDOWN */}
+                <div className="space-y-3">
+                  <h5 className="text-[11px] font-black uppercase tracking-widest text-zinc-500 flex items-center gap-1.5">
+                    <CreditCard className="h-3.5 w-3.5" />
+                    Move-Out Settlement Breakdown
+                  </h5>
+                  <div className="bg-zinc-950 p-4 border border-zinc-900 rounded-xl space-y-3 text-xs font-semibold">
+                    <div className="flex justify-between items-center text-zinc-400">
+                      <span>Total Deposit Collected</span>
+                      <span className="text-zinc-200 font-extrabold">₹{collectedDeposit.toLocaleString('en-IN')}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-zinc-400">
+                      <span>Damage Recoveries (Deducted from Deposit)</span>
+                      <span className="text-red-400 font-extrabold">-{`₹${depositRecoveriesAmount.toLocaleString('en-IN')}`}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-zinc-400 border-b border-zinc-900/60 pb-2">
+                      <span>Other Deposit Deductions / Adjustments</span>
+                      <span className="text-red-400 font-extrabold">-{`₹${Math.max(0, totalDeductions - depositRecoveriesAmount).toLocaleString('en-IN')}`}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-zinc-400">
+                      <span>Direct Cash / UPI Recoveries (Collected)</span>
+                      <span className="text-green-400 font-extrabold">₹{cashUpiRecoveriesAmount.toLocaleString('en-IN')}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-zinc-400 border-b border-zinc-900/60 pb-2">
+                      <span>Waived Damages (No liability)</span>
+                      <span className="text-zinc-500 font-extrabold">₹{waivedRecoveriesAmount.toLocaleString('en-IN')}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-zinc-400">
+                      <span>Total Refunded to Date</span>
+                      <span className="text-purple-400 font-extrabold">-{`₹${(profile?.depositRefundedAmount || 0).toLocaleString('en-IN')}`}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-sm pt-2 border-t border-zinc-900 font-black">
+                      <span className="text-zinc-100">Net Refundable Balance / Settlement Liability</span>
+                      <span className="text-primary font-black">₹{finalRefundableDeposit.toLocaleString('en-IN')}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* DAMAGE RECOVERY HISTORY TIMELINE */}
+                <div className="space-y-3">
+                  <h5 className="text-[11px] font-black uppercase tracking-widest text-zinc-500 flex items-center gap-1.5">
+                    <ListTodo className="h-3.5 w-3.5" />
+                    Damage Recovery History & Timeline
+                  </h5>
+                  <div className="bg-zinc-950 p-4 border border-zinc-900 rounded-xl space-y-3 max-h-56 overflow-y-auto scrollbar-none">
+                    {damageRecoveries.length === 0 ? (
+                      <div className="text-center text-[10px] text-zinc-500 font-bold uppercase tracking-wider py-4">
+                        No damage recovery records found for this stay.
+                      </div>
+                    ) : (
+                      damageRecoveries.map((rec: any) => (
+                        <div key={rec.id} className="p-3 border border-zinc-900/80 bg-zinc-950/40 rounded-lg flex flex-col gap-1 text-xs">
+                          <div className="flex justify-between items-start">
+                            <span className="font-extrabold text-zinc-200">
+                              {rec.reason || 'Damage Recovery'}
+                            </span>
+                            <span className="font-black text-zinc-150">₹{rec.amount.toLocaleString('en-IN')}</span>
+                          </div>
+                          
+                          {rec.items && rec.items.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {rec.items.map((item: any) => (
+                                <span key={item.id} className="text-[9px] px-1.5 py-0.5 rounded bg-zinc-900 text-zinc-400 font-medium">
+                                  {item.title}: ₹{item.amount}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+
+                          <div className="flex justify-between items-center text-[9px] text-zinc-500 font-bold uppercase tracking-wider mt-1.5 pt-1.5 border-t border-zinc-900/60 font-sans">
+                            <span>Method: {rec.recoveryMethod}</span>
+                            <span className={`font-black
+                              ${rec.status === 'RECOVERED' ? 'text-green-400' : 
+                                rec.status === 'DISPUTED' ? 'text-red-400' : 
+                                rec.status === 'WAIVED' ? 'text-zinc-500' : 
+                                'text-amber-400'}`}
+                            >
+                              {rec.status}
+                            </span>
+                          </div>
+                          {rec.disputeReason && (
+                            <p className="text-[9px] text-red-400/80 italic mt-1 leading-normal">
+                              Dispute: "{rec.disputeReason}"
+                            </p>
+                          )}
+                          {rec.waivedReason && (
+                            <p className="text-[9px] text-zinc-500 italic mt-1 leading-normal">
+                              Waive reason: "{rec.waivedReason}"
+                            </p>
+                          )}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
                 {/* Deposit Transaction History */}
                 <div className="space-y-3">
                   <h5 className="text-[11px] font-black uppercase tracking-widest text-zinc-500 flex items-center gap-1.5">
@@ -715,8 +856,26 @@ export default function ResidentProfileDrawer() {
               </div>
 
               {/* Footer Panel */}
-              <div className="p-4 bg-zinc-950 flex justify-end">
-                <Button onClick={closeProfile} className="bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white uppercase tracking-widest font-black text-[10px] py-2 px-5">
+              <div className="p-4 bg-zinc-950 flex justify-between items-center gap-3 border-t border-zinc-900">
+                {profile.settlementStatus === 'LOCKED' ? (
+                  <div className="flex items-center gap-1.5 text-[10px] font-black uppercase text-red-400 bg-red-500/10 border border-red-500/20 px-3 py-2 rounded-xl animate-pulse">
+                    <Lock className="h-3.5 w-3.5" /> Stay Settlement Locked
+                  </div>
+                ) : (
+                  <Button 
+                    onClick={() => {
+                      if (confirm("Are you sure you want to permanently lock this stay's settlement status? This action is irreversible and blocks all future financial edits, recoveries, or refunds.")) {
+                        lockSettlementMutation.mutate();
+                      }
+                    }}
+                    disabled={lockSettlementMutation.isPending}
+                    className="bg-red-600 hover:bg-red-700 border border-red-500/30 text-white uppercase tracking-widest font-black text-[10px] py-2.5 px-4 rounded-xl flex items-center gap-1 select-none cursor-pointer"
+                  >
+                    <Lock className="h-3.5 w-3.5" />
+                    {lockSettlementMutation.isPending ? 'Locking...' : 'Lock Settlement'}
+                  </Button>
+                )}
+                <Button onClick={closeProfile} className="bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white uppercase tracking-widest font-black text-[10px] py-2.5 px-5 rounded-xl cursor-pointer select-none">
                   Close stay ledger
                 </Button>
               </div>

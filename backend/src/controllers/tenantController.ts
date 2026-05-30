@@ -172,6 +172,10 @@ export const getResidentProfile = async (req: Request, res: Response) => {
         },
         complaints: {
           orderBy: { createdAt: 'desc' }
+        },
+        damageRecoveries: {
+          include: { items: true },
+          orderBy: { createdAt: 'desc' }
         }
       }
     });

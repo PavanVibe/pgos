@@ -12,19 +12,37 @@ const prisma = basePrisma.$extends({
   query: {
     $allModels: {
       async findMany({ model, args, query }) {
-        if (model !== 'EventLog' && model !== 'AuditLog' && model !== 'OnboardingAnalytics') {
+        if (
+          model !== 'EventLog' && 
+          model !== 'AuditLog' && 
+          model !== 'OnboardingAnalytics' && 
+          model !== 'DamageRecovery' && 
+          model !== 'DamageRecoveryItem'
+        ) {
           args.where = { isActive: true, ...args.where };
         }
         return query(args);
       },
       async findFirst({ model, args, query }) {
-        if (model !== 'EventLog' && model !== 'AuditLog' && model !== 'OnboardingAnalytics') {
+        if (
+          model !== 'EventLog' && 
+          model !== 'AuditLog' && 
+          model !== 'OnboardingAnalytics' && 
+          model !== 'DamageRecovery' && 
+          model !== 'DamageRecoveryItem'
+        ) {
           args.where = { isActive: true, ...args.where };
         }
         return query(args);
       },
       async count({ model, args, query }) {
-        if (model !== 'EventLog' && model !== 'AuditLog' && model !== 'OnboardingAnalytics') {
+        if (
+          model !== 'EventLog' && 
+          model !== 'AuditLog' && 
+          model !== 'OnboardingAnalytics' && 
+          model !== 'DamageRecovery' && 
+          model !== 'DamageRecoveryItem'
+        ) {
           args.where = { isActive: true, ...args.where };
         }
         return query(args);

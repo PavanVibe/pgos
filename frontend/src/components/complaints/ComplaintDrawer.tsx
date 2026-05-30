@@ -14,7 +14,7 @@ import { useState } from 'react';
 import { useResidentProfileStore } from '@/store/useResidentProfileStore';
 
 export default function ComplaintDrawer() {
-  const { isViewOpen, closeViewComplaint } = useComplaintStore();
+  const { isViewOpen, closeViewComplaint, openResolveComplaint } = useComplaintStore();
   const { openProfile } = useResidentProfileStore();
   const { activePgId } = useOrganizationStore();
   const queryClient = useQueryClient();
@@ -168,10 +168,9 @@ export default function ComplaintDrawer() {
                         <Button
                           size="sm"
                           className="h-8 bg-green-600 hover:bg-green-700 text-white text-[11px] font-bold px-3 rounded-lg flex items-center gap-1 transition-all"
-                          disabled={isResolving}
-                          onClick={() => resolveMutation.mutate(complaint.id)}
+                          onClick={() => openResolveComplaint(complaint.id)}
                         >
-                          {isResolving ? 'Resolving...' : 'Resolve'}
+                          Resolve
                         </Button>
                       </div>
                     </div>

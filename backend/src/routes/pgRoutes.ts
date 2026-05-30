@@ -19,6 +19,12 @@ import {
   sendReminderManual,
   saveTenantNoteManual
 } from '../controllers/pgController';
+import {
+  getRecoveriesLedger,
+  getDamageRecoveryDashboard,
+  updateRecoveryStatus,
+  lockStaySettlement
+} from '../controllers/recoveriesController';
 import dashboardRoutes from './dashboardRoutes';
 import { getDashboardSummary } from '../controllers/dashboardController';
 import { getUploadSignature, getSignedDocumentUrl } from '../controllers/uploadController';
@@ -55,6 +61,12 @@ router.post('/:pgId/complaints', canAccessPG, createComplaint);
 router.post('/:pgId/complaints/:complaintId/resolve', canAccessPG, resolveComplaint);
 router.get('/:pgId/complaints', canAccessPG, getPGComplaints);
 router.get('/:pgId/complaints/:complaintId', canAccessPG, getPGComplaint);
+
+// Damage Recoveries & Settlement locking
+router.get('/:pgId/recoveries/ledger', canAccessPG, getRecoveriesLedger);
+router.get('/:pgId/recoveries/dashboard', canAccessPG, getDamageRecoveryDashboard);
+router.post('/:pgId/recoveries/:recoveryId/status', canAccessPG, updateRecoveryStatus);
+router.post('/:pgId/tenants/:tenantId/lock-settlement', canAccessPG, lockStaySettlement);
 
 // Automation & Notifications Manual Triggers
 router.post('/:pgId/automation/generate-invoices', canAccessPG, generateInvoicesManual);

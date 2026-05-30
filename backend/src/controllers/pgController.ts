@@ -386,7 +386,30 @@ export const resolveComplaint = async (req: Request, res: Response) => {
     const { complaintId } = req.params;
     const actorId = (req as any).auth?.userId || 'system';
 
-    const updatedComplaint = await ResolveComplaintWorkflow.execute(pgId as string, complaintId as string, actorId);
+    const {
+      repairCost,
+      responsibility,
+      assignedTenantId,
+      billUrl,
+      resolvedImageUrl,
+      resolutionNotes,
+      deductionItems,
+      recoveryMethodInput
+    } = req.body;
+
+    const updatedComplaint = await ResolveComplaintWorkflow.execute(
+      pgId as string,
+      complaintId as string,
+      actorId,
+      repairCost ? parseFloat(repairCost) : undefined,
+      responsibility,
+      assignedTenantId,
+      billUrl,
+      resolvedImageUrl,
+      resolutionNotes,
+      deductionItems,
+      recoveryMethodInput
+    );
     res.status(200).json({ status: 'success', data: updatedComplaint });
   } catch (error: any) {
     res.status(400).json({ error: error.message });
