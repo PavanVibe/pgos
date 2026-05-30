@@ -4,7 +4,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '
 import { useVacateStore } from '@/store/useVacateStore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { LogOut, User, DollarSign, Building, Search } from 'lucide-react';
+import { LogOut, User, DollarSign, Building, Search, ArrowRight, ShieldCheck, Wallet, ShieldAlert, Sparkles } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchApi } from '@/lib/api';
@@ -25,7 +25,6 @@ export default function VacateResidentSheet({ pgId }: { pgId: string }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchActive, setIsSearchActive] = useState(true);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const [deduction, setDeduction] = useState('');
   const queryClient = useQueryClient();
 
   // 1. Fetch live rooms and occupants to extract all active residents
@@ -53,7 +52,14 @@ export default function VacateResidentSheet({ pgId }: { pgId: string }) {
     });
   }
 
-  // 2. Synchronize selected tenant ID and modes from store
+  // 2. Fetch complete stay profile details for financial settlement
+  const { data: tenantProfileResponse, isLoading: profileLoading } = useQuery({
+    queryKey: ['residents', 'profile', localTenantId],
+    queryFn: () => fetchApi(`/tenants/profiles/${localTenantId}`),
+    enabled: !!localTenantId && isVacateOpen && !isSearchActive,
+  });
+
+  // 3. Synchronize selected tenant ID and modes from store
   useEffect(() => {
     if (isVacateOpen) {
       if (selectedTenantId) {
@@ -81,8 +87,6 @@ export default function VacateResidentSheet({ pgId }: { pgId: string }) {
     );
   });
 
-
-
   const selectResident = (id: string) => {
     setLocalTenantId(id);
     setIsSearchActive(false); // Collapse search view, show display card
@@ -93,16 +97,47 @@ export default function VacateResidentSheet({ pgId }: { pgId: string }) {
   // Find currently active resident details
   const activeResident = activeResidents.find(r => r.id === localTenantId);
 
-  const securityDeposit = activeResident ? activeResident.securityDeposit : 6000;
-  const numDeduction = Number(deduction) || 0;
-  const refundAmount = securityDeposit - numDeduction;
+  // Financial Settlement Calculations
+  const profile = tenantProfileResponse?.data;
+  const expectedDeposit = profile ? profile.securityDeposit : (activeResident ? activeResident.securityDeposit : 0);
 
-  // 3. Vacate Resident Mutation (targeted cache patching)
+  const collectedDeposit = profile && profile.invoices
+    ? profile.invoices
+        .filter((inv: any) => inv.type === 'SECURITY_DEPOSIT' && inv.status === 'PAID')
+        .reduce((sum: number, inv: any) => sum + inv.amount, 0)
+    : 0;
+
+  const outstandingRent = profile && profile.invoices
+    ? profile.invoices
+        .filter((inv: any) => inv.type === 'RENT' && inv.status !== 'PAID')
+        .reduce((sum: number, inv: any) => sum + inv.amount, 0)
+    : 0;
+
+  const outstandingUtilities = profile && profile.invoices
+    ? profile.invoices
+        .filter((inv: any) => (inv.type === 'UTILITY' || inv.type === 'UTILITIES') && inv.status !== 'PAID')
+        .reduce((sum: number, inv: any) => sum + inv.amount, 0)
+    : 0;
+
+  const outstandingDamage = profile && profile.damageRecoveries
+    ? profile.damageRecoveries
+        .filter((rec: any) => rec.status !== 'FULLY_RECOVERED' && rec.status !== 'WAIVED')
+        .reduce((sum: number, rec: any) => sum + rec.outstandingAmount, 0)
+    : 0;
+
+  const outstandingDepositObligations = Math.max(0, expectedDeposit - collectedDeposit);
+
+  const totalDeductions = outstandingRent + outstandingUtilities + outstandingDamage;
+
+  const refundableDeposit = Math.max(0, collectedDeposit - totalDeductions);
+  const remainingLiability = refundableDeposit === 0 ? Math.abs(collectedDeposit - totalDeductions) : 0;
+
+  // 4. Vacate Resident Mutation (targeted cache patching)
   const vacateMutation = useMutation({
     mutationFn: () => 
       fetchApi(`/tenants/pgs/${pgId}/tenants/${localTenantId}/vacate`, {
         method: 'POST',
-        body: JSON.stringify({ deduction: numDeduction })
+        body: JSON.stringify({ deduction: totalDeductions })
       }),
     onSuccess: async () => {
       toast.success('Resident vacated successfully. Bed is now vacant!');
@@ -114,13 +149,14 @@ export default function VacateResidentSheet({ pgId }: { pgId: string }) {
           queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.occupancy(pgId) }),
           queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.activity(pgId) }),
           queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.summary(pgId) }),
+          queryClient.invalidateQueries({ queryKey: ['recoveries-ledger', pgId] }),
+          queryClient.invalidateQueries({ queryKey: ['recoveries-dashboard', pgId] }),
           queryClient.invalidateQueries({ queryKey: queryKeys.residents(pgId) }),
           queryClient.refetchQueries({ queryKey: ['pg-rooms', pgId] }),
         ]);
-        toast.info('Occupancy map refreshed.');
+        toast.info('Occupancy map and finance records refreshed.');
       }
 
-      setDeduction('');
       setSearchQuery('');
       setIsSearchActive(true);
       closeVacate();
@@ -138,7 +174,7 @@ export default function VacateResidentSheet({ pgId }: { pgId: string }) {
     vacateMutation.mutate();
   };
 
-  const loading = vacateMutation.isPending;
+  const loading = vacateMutation.isPending || profileLoading;
   const showResults = isSearchActive && isDropdownOpen && searchQuery.trim() !== '';
 
   return (
@@ -149,7 +185,7 @@ export default function VacateResidentSheet({ pgId }: { pgId: string }) {
             <LogOut className="h-5 w-5" /> Vacate Resident
           </SheetTitle>
           <SheetDescription className="text-zinc-400">
-            Process resident move-out, free their bed, and calculate final security deposit settlement.
+            Process resident move-out, free their bed, and calculate final security deposit settlement automatically.
           </SheetDescription>
         </SheetHeader>
 
@@ -190,7 +226,7 @@ export default function VacateResidentSheet({ pgId }: { pgId: string }) {
                           setIsDropdownOpen(true);
                         }
                       }}
-                      onBlur={() => setTimeout(() => setIsDropdownOpen(false), 200)} // Small delay to register click callbacks
+                      onBlur={() => setTimeout(() => setIsDropdownOpen(false), 200)}
                       className="bg-zinc-950 border-zinc-800 text-white pl-9 h-10 text-sm focus:border-zinc-700 w-full"
                     />
                     <Search className="absolute left-3 top-3 h-4 w-4 text-zinc-500" />
@@ -207,7 +243,7 @@ export default function VacateResidentSheet({ pgId }: { pgId: string }) {
                               <button
                                 key={res.id}
                                 type="button"
-                                onPointerDown={() => selectResident(res.id)} // onPointerDown handles touch/mouse and fires before Input onBlur!
+                                onPointerDown={() => selectResident(res.id)}
                                 className={`w-full text-left p-3 flex justify-between items-center transition-all cursor-pointer hover:bg-zinc-900/60
                                   ${isSelected ? 'bg-primary/5 border-l-2 border-primary' : 'border-l-2 border-transparent'}`}
                               >
@@ -237,7 +273,7 @@ export default function VacateResidentSheet({ pgId }: { pgId: string }) {
               ) : (
                 /* DISPLAY MODE (Selected Resident Card) */
                 activeResident ? (
-                  <div className="space-y-1 bg-zinc-900/30 border border-zinc-800 p-4 rounded-xl flex items-center justify-between shadow-sm">
+                  <div className="space-y-1 bg-zinc-900/35 border border-zinc-800/80 p-4 rounded-xl flex items-center justify-between shadow-sm">
                     <div>
                       <span className="text-xs uppercase tracking-wider font-semibold text-zinc-500">Selected Resident</span>
                       <p className="text-lg font-bold text-white mt-0.5">{activeResident.name}</p>
@@ -265,56 +301,104 @@ export default function VacateResidentSheet({ pgId }: { pgId: string }) {
                 )
               )}
 
-              {/* Financial Calculation Panel (Only shown once a resident is selected & confirmed) */}
+              {/* Financial Calculation Panel (Loaded via React Query) */}
               {localTenantId && activeResident && !isSearchActive && (
                 <>
-                  <div className="space-y-4 bg-zinc-950 p-4 border border-zinc-800 rounded-xl">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-zinc-400 font-medium flex items-center gap-1.5">
-                        <DollarSign className="h-4 w-4 text-zinc-500" /> Original Deposit
-                      </span>
-                      <span className="font-semibold text-white">₹{securityDeposit}</span>
+                  {profileLoading ? (
+                    <div className="h-64 flex flex-col items-center justify-center border border-dashed border-zinc-800 bg-zinc-950/20 rounded-xl text-zinc-500 text-xs animate-pulse">
+                      Calculating financial vacate dues...
                     </div>
-                    
-                    <div className="space-y-2 pt-3 border-t border-zinc-800">
-                      <label className="text-sm font-medium text-zinc-400">Damage & Utility Deductions (₹)</label>
-                      <Input 
-                        type="number" 
-                        placeholder="0" 
-                        value={deduction}
-                        onChange={(e) => setDeduction(e.target.value)}
-                        className="bg-black border-zinc-800 focus:border-zinc-700 text-white font-medium"
-                      />
+                  ) : (
+                    <div className="space-y-4">
+                      {/* Security Deposit Details Widget */}
+                      <div className="bg-zinc-950 border border-zinc-900 rounded-xl p-4 space-y-3">
+                        <h4 className="text-[10px] font-black uppercase tracking-wider text-zinc-550 flex items-center gap-1.5 border-b border-zinc-900 pb-2">
+                          <ShieldCheck className="h-3.5 w-3.5 text-zinc-500" /> Security Deposit Held
+                        </h4>
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="text-zinc-400 font-medium">Expected Deposit</span>
+                          <span className="font-bold text-zinc-350">₹{expectedDeposit.toLocaleString('en-IN')}</span>
+                        </div>
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="text-zinc-400 font-medium">Collected Deposit</span>
+                          <span className="font-black text-white">₹{collectedDeposit.toLocaleString('en-IN')}</span>
+                        </div>
+                        <div className="flex justify-between items-center text-xs pt-1.5 border-t border-zinc-900/60">
+                          <span className="text-zinc-500 font-bold">Outstanding Deposit Obligation</span>
+                          <span className="font-semibold text-zinc-450">₹{outstandingDepositObligations.toLocaleString('en-IN')}</span>
+                        </div>
+                      </div>
+
+                      {/* Outstanding Deductions Breakdown Widget */}
+                      <div className="bg-zinc-950 border border-zinc-900 rounded-xl p-4 space-y-3">
+                        <h4 className="text-[10px] font-black uppercase tracking-wider text-zinc-550 flex items-center gap-1.5 border-b border-zinc-900 pb-2">
+                          <Wallet className="h-3.5 w-3.5 text-zinc-500" /> Outstanding Resident Liabilities
+                        </h4>
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="text-zinc-400 font-medium">Rent Due</span>
+                          <span className="font-bold text-amber-500">₹{outstandingRent.toLocaleString('en-IN')}</span>
+                        </div>
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="text-zinc-400 font-medium">Damage Charges</span>
+                          <span className="font-bold text-amber-500">₹{outstandingDamage.toLocaleString('en-IN')}</span>
+                        </div>
+                        {outstandingUtilities > 0 && (
+                          <div className="flex justify-between items-center text-xs">
+                            <span className="text-zinc-400 font-medium">Utility Due</span>
+                            <span className="font-bold text-amber-500">₹{outstandingUtilities.toLocaleString('en-IN')}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between items-center text-xs pt-1.5 border-t border-zinc-900/60 font-bold">
+                          <span className="text-zinc-300">Total Deductions</span>
+                          <span className="text-white">₹{totalDeductions.toLocaleString('en-IN')}</span>
+                        </div>
+                      </div>
+
+                      {/* Final Auto Settlement Card */}
+                      <div className="bg-zinc-950/40 border border-zinc-800 p-4 rounded-xl space-y-4 shadow-inner">
+                        <div className="flex justify-between items-center text-sm font-bold">
+                          <span className="text-zinc-300 flex items-center gap-1">
+                            <Sparkles className="h-4 w-4 text-purple-400" /> Final Refundable Deposit
+                          </span>
+                          <span className="text-xl font-black text-green-400">
+                            ₹{refundableDeposit.toLocaleString('en-IN')}
+                          </span>
+                        </div>
+
+                        {remainingLiability > 0 && (
+                          <div className="flex justify-between items-center text-sm font-bold pt-2 border-t border-zinc-900">
+                            <span className="text-zinc-450 flex items-center gap-1">
+                              <ShieldAlert className="h-4 w-4 text-red-500" /> Remaining Tenant Debt
+                            </span>
+                            <span className="text-base font-extrabold text-red-400">
+                              ₹{remainingLiability.toLocaleString('en-IN')}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Warning Alert */}
+                      <div className="bg-amber-500/5 text-amber-500 border border-amber-500/20 p-4 rounded-xl text-xs leading-relaxed font-medium">
+                        <strong>Warning:</strong> This action cannot be undone. Once submitted, the resident is finalized, their bed is instantly freed, and sequential deposit deductions are applied inside the ledger.
+                      </div>
+
+                      {/* Actions */}
+                      <div className="pt-4 flex gap-2">
+                        <Button 
+                          type="button" 
+                          variant="ghost" 
+                          className="w-1/2 bg-zinc-900 border border-zinc-800 text-zinc-300 hover:bg-zinc-800 hover:text-white font-semibold h-11 transition-all" 
+                          onClick={() => closeVacate()} 
+                          disabled={loading}
+                        >
+                          Cancel
+                        </Button>
+                        <Button variant="destructive" className="w-1/2 h-11 font-semibold" onClick={handleConfirm} disabled={loading}>
+                          {loading ? 'Processing...' : 'Confirm Vacate'}
+                        </Button>
+                      </div>
                     </div>
-
-                    <div className="flex justify-between text-lg font-bold pt-3 border-t border-zinc-800">
-                      <span className="text-zinc-300">Final Settlement Refund</span>
-                      <span className={refundAmount < 0 ? 'text-red-400' : 'text-green-400'}>
-                        ₹{refundAmount}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Warning Alert */}
-                  <div className="bg-amber-500/5 text-amber-500 border border-amber-500/20 p-4 rounded-xl text-xs leading-relaxed font-medium">
-                    <strong>Warning:</strong> This action cannot be undone. Once submitted, the resident profile is finalized, their bed is instantly freed, and any pending invoices will require manual resolution.
-                  </div>
-
-                  {/* Actions */}
-                  <div className="pt-4 flex gap-2">
-                    <Button 
-                      type="button" 
-                      variant="ghost" 
-                      className="w-1/2 bg-zinc-900 border border-zinc-800 text-zinc-300 hover:bg-zinc-800 hover:text-white font-semibold h-11 transition-all" 
-                      onClick={() => closeVacate()} 
-                      disabled={loading}
-                    >
-                      Cancel
-                    </Button>
-                    <Button variant="destructive" className="w-1/2 h-11 font-semibold" onClick={handleConfirm} disabled={loading}>
-                      {loading ? 'Processing...' : 'Confirm Vacate'}
-                    </Button>
-                  </div>
+                  )}
                 </>
               )}
 

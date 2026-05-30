@@ -674,8 +674,10 @@ function RecoveriesLedgerContent() {
                             {row.refundableDeposit > 0 && (
                               <option value="deposit" className="bg-zinc-950 text-blue-400 font-bold uppercase">Deduct Deposit (₹{row.refundableDeposit})</option>
                             )}
-                            <option value="waive" className="bg-zinc-950 text-zinc-400 font-bold uppercase">Waive</option>
-                            <option value="dispute" className="bg-zinc-950 text-red-400 font-bold uppercase">Dispute</option>
+                            <optgroup label="More Actions ▼" className="bg-zinc-950 text-zinc-500 font-bold uppercase">
+                              <option value="waive" className="bg-zinc-950 text-zinc-400 font-bold uppercase">Waive</option>
+                              <option value="dispute" className="bg-zinc-950 text-red-400 font-bold uppercase">Dispute</option>
+                            </optgroup>
                           </select>
                         </div>
                       )}
