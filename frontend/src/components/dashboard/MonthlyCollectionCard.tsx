@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Calendar, DollarSign, Percent, TrendingUp } from "lucide-react";
 import { fetchApi } from "@/lib/api";
 import { queryKeys } from "@/lib/queryKeys";
+import Link from "next/link";
 
 export default function MonthlyCollectionCard({ pgId }: { pgId: string }) {
   const { data: response, isLoading, isError } = useQuery({
@@ -46,11 +47,17 @@ export default function MonthlyCollectionCard({ pgId }: { pgId: string }) {
 
   return (
     <Card className="col-span-1 border border-zinc-900 bg-zinc-950/20 hover:border-zinc-850 transition-all duration-300">
-      <CardHeader className="pb-2">
+      <CardHeader className="pb-2 flex flex-row items-center justify-between space-y-0">
         <CardTitle className="text-xs font-bold uppercase tracking-widest text-zinc-500 flex items-center gap-1.5">
           <Calendar className="h-4 w-4 text-primary" />
           This Month Collection
         </CardTitle>
+        <Link 
+          href="/collections" 
+          className="text-[10px] font-bold text-zinc-400 hover:text-primary transition-colors flex items-center gap-1 uppercase tracking-wider bg-zinc-900/60 hover:bg-zinc-900 border border-zinc-850 hover:border-zinc-800 px-2 py-1 rounded"
+        >
+          History
+        </Link>
       </CardHeader>
       <CardContent className="space-y-4">
         {isLoading && (
