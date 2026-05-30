@@ -7,6 +7,7 @@ import {
   createRoom,
   getRoomHistory,
   payRent,
+  payDeposit,
   createComplaint,
   resolveComplaint,
   getPGComplaints,
@@ -47,6 +48,7 @@ router.get('/:pgId/rooms/:roomId/history', canAccessPG, getRoomHistory);
 
 // Operations Mutations
 router.post('/:pgId/tenants/:tenantId/pay-rent', canAccessPG, payRent);
+router.post('/:pgId/tenants/:tenantId/pay-deposit', canAccessPG, payDeposit);
 router.post('/:pgId/complaints', canAccessPG, createComplaint);
 router.post('/:pgId/complaints/:complaintId/resolve', canAccessPG, resolveComplaint);
 router.get('/:pgId/complaints', canAccessPG, getPGComplaints);

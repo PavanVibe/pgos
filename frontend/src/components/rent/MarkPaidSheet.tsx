@@ -5,9 +5,9 @@ import { useRentStore } from '@/store/useRentStore';
 import { useOrganizationStore } from '@/store/useOrganizationStore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { IndianRupee, QrCode, Banknote, HelpCircle, CheckCircle } from 'lucide-react';
+import { IndianRupee, QrCode, Banknote, HelpCircle, CheckCircle, Building } from 'lucide-react';
 import { useState, useEffect } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { fetchApi } from '@/lib/api';
 import { queryKeys } from '@/lib/queryKeys';
 import { toast } from 'sonner';
@@ -26,9 +26,34 @@ export default function MarkPaidSheet() {
   } = useRentStore();
   
   const { activePgId } = useOrganizationStore();
-  const [method, setMethod] = useState<'upi' | 'cash'>('upi');
+  const [method, setMethod] = useState<'upi' | 'cash' | 'bank_transfer'>('upi');
   const [amountInput, setAmountInput] = useState<string>('');
   const queryClient = useQueryClient();
+
+  // 0. Query resident profile stay ledger for overall rent/deposit breakdown
+  const { data: profileResponse } = useQuery({
+    queryKey: ['residents', 'profile', selectedTenantId],
+    queryFn: () => fetchApi(`/tenants/profiles/${selectedTenantId}`),
+    enabled: !!selectedTenantId && isMarkPaidOpen,
+  });
+
+  const profile = profileResponse?.data;
+  const invoices = profile?.invoices || [];
+
+  const selectedInvoice = invoices.find((inv: any) => inv.id === selectedInvoiceId);
+  const invoiceType = selectedInvoice?.type || 'RENT';
+
+  const outstandingRent = invoices
+    .filter((inv: any) => inv.type === 'RENT' && inv.status !== 'PAID')
+    .reduce((sum: number, inv: any) => sum + inv.amount, 0);
+
+  const outstandingDeposit = invoices
+    .filter((inv: any) => inv.type === 'SECURITY_DEPOSIT' && inv.status !== 'PAID')
+    .reduce((sum: number, inv: any) => sum + inv.amount, 0);
+
+  const outstandingTotal = invoices
+    .filter((inv: any) => inv.status !== 'PAID')
+    .reduce((sum: number, inv: any) => sum + inv.amount, 0);
 
   // Initialize amountInput to the full dues whenever the sheet opens
   useEffect(() => {
@@ -60,17 +85,20 @@ export default function MarkPaidSheet() {
   const isPartial = parsedAmount < originalDues && parsedAmount > 0;
   const remainingDues = Math.max(0, originalDues - parsedAmount);
 
-  // 1. Rent payment mutation (safely supports partial or full amount)
+  // 1. payment mutation (safely supports partial or full amount, dynamically routes to rent or deposit workflows)
   const payMutation = useMutation({
-    mutationFn: () => 
-      fetchApi(`/pgs/${activePgId}/tenants/${selectedTenantId}/pay-rent`, {
+    mutationFn: () => {
+      const selectedInvoice = invoices.find((inv: any) => inv.id === selectedInvoiceId);
+      const endpoint = selectedInvoice?.type === 'SECURITY_DEPOSIT' ? 'pay-deposit' : 'pay-rent';
+      return fetchApi(`/pgs/${activePgId}/tenants/${selectedTenantId}/${endpoint}`, {
         method: 'POST',
         body: JSON.stringify({ 
           paymentMode: method,
           amount: parsedAmount,
           invoiceId: selectedInvoiceId
         })
-      }),
+      });
+    },
     onSuccess: () => {
       toast.success('Payment recorded successfully', {
         description: `₹${parsedAmount.toLocaleString('en-IN')} settled via ${method.toUpperCase()}`
@@ -147,7 +175,9 @@ export default function MarkPaidSheet() {
 
             <div className="grid grid-cols-2 gap-4 pt-3.5 border-t border-zinc-900/80">
               <div>
-                <span className="text-[10px] text-zinc-500 uppercase font-black tracking-widest block">Rent Due</span>
+                <span className="text-[10px] text-zinc-500 uppercase font-black tracking-widest block">
+                  {invoiceType === 'SECURITY_DEPOSIT' ? 'Deposit Due' : 'Rent Due'}
+                </span>
                 <span className="text-base font-black text-emerald-400 block mt-0.5">
                   ₹{originalDues.toLocaleString('en-IN')}
                 </span>
@@ -167,23 +197,19 @@ export default function MarkPaidSheet() {
             </div>
           </div>
 
-          {/* Outstanding Balance Context */}
-          <div className="bg-zinc-950 border border-zinc-900 p-4 rounded-xl flex items-center justify-between">
-            <div>
-              <span className="text-[10px] text-zinc-500 uppercase font-bold tracking-wider block">Outstanding dues</span>
-              <span className="text-sm font-black text-zinc-350 flex items-center text-zinc-350 mt-0.5">
-                ₹{originalDues.toLocaleString('en-IN')}
-              </span>
+          {/* Outstanding Balance Breakdown */}
+          <div className="bg-zinc-950 border border-zinc-900 p-4 rounded-xl space-y-3 shadow-inner">
+            <div className="flex justify-between items-center text-xs font-semibold">
+              <span className="text-zinc-500 font-bold uppercase tracking-wider text-[9px]">Outstanding Rent</span>
+              <span className="text-emerald-400 font-black text-sm">₹{outstandingRent.toLocaleString('en-IN')}</span>
             </div>
-            <div className="text-right">
-              <span className="text-[10px] text-zinc-500 uppercase font-bold tracking-wider block">Settlement mode</span>
-              <span className={`text-xs font-extrabold px-2.5 py-0.5 rounded border mt-0.5 block
-                ${isPartial 
-                  ? 'text-amber-400 bg-amber-500/10 border-amber-500/20' 
-                  : 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'}`}
-              >
-                {isPartial ? 'Partial Settlement' : 'Full Settlement'}
-              </span>
+            <div className="flex justify-between items-center text-xs font-semibold border-t border-zinc-900/60 pt-2.5">
+              <span className="text-zinc-500 font-bold uppercase tracking-wider text-[9px]">Outstanding Deposit</span>
+              <span className="text-blue-400 font-black text-sm">₹{outstandingDeposit.toLocaleString('en-IN')}</span>
+            </div>
+            <div className="flex justify-between items-center text-sm font-black border-t border-zinc-900 pt-2.5">
+              <span className="text-zinc-400 font-bold uppercase tracking-wider text-[10px]">Total Outstanding</span>
+              <span className="text-red-400 font-black text-base">₹{outstandingTotal.toLocaleString('en-IN')}</span>
             </div>
           </div>
 
@@ -230,27 +256,39 @@ export default function MarkPaidSheet() {
           {/* Payment Method Selector */}
           <div className="space-y-2">
             <label className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Payment Method</label>
-            <div className="grid grid-cols-2 gap-3">
+            <div className={`grid gap-3 ${invoiceType === 'SECURITY_DEPOSIT' ? 'grid-cols-3' : 'grid-cols-2'}`}>
               <button
                 type="button"
                 onClick={() => setMethod('upi')}
                 disabled={loading}
                 className={`flex items-center justify-center gap-2 p-3 rounded-xl border-2 transition-all cursor-pointer select-none
-                  ${method === 'upi' ? 'border-primary bg-primary/5 text-primary' : 'border-zinc-900 hover:border-zinc-800 bg-zinc-950/20 text-zinc-400'}`}
+                  ${method === 'upi' ? 'border-primary bg-primary/5 text-primary' : 'border-zinc-900 hover:border-zinc-850 bg-zinc-950/20 text-zinc-450'}`}
               >
                 <QrCode className="h-4 w-4" />
-                <span className="text-xs font-extrabold uppercase tracking-wide">UPI / Online</span>
+                <span className="text-[10px] font-extrabold uppercase tracking-wide">UPI</span>
               </button>
               <button
                 type="button"
                 onClick={() => setMethod('cash')}
                 disabled={loading}
                 className={`flex items-center justify-center gap-2 p-3 rounded-xl border-2 transition-all cursor-pointer select-none
-                  ${method === 'cash' ? 'border-primary bg-primary/5 text-primary' : 'border-zinc-900 hover:border-zinc-800 bg-zinc-950/20 text-zinc-400'}`}
+                  ${method === 'cash' ? 'border-primary bg-primary/5 text-primary' : 'border-zinc-900 hover:border-zinc-850 bg-zinc-950/20 text-zinc-450'}`}
               >
                 <Banknote className="h-4 w-4" />
-                <span className="text-xs font-extrabold uppercase tracking-wide">Cash</span>
+                <span className="text-[10px] font-extrabold uppercase tracking-wide">Cash</span>
               </button>
+              {invoiceType === 'SECURITY_DEPOSIT' && (
+                <button
+                  type="button"
+                  onClick={() => setMethod('bank_transfer')}
+                  disabled={loading}
+                  className={`flex items-center justify-center gap-2 p-3 rounded-xl border-2 transition-all cursor-pointer select-none
+                    ${method === 'bank_transfer' ? 'border-primary bg-primary/5 text-primary' : 'border-zinc-900 hover:border-zinc-850 bg-zinc-950/20 text-zinc-450'}`}
+                >
+                  <Building className="h-4 w-4" />
+                  <span className="text-[10px] font-extrabold uppercase tracking-wide">Transfer</span>
+                </button>
+              )}
             </div>
           </div>
 

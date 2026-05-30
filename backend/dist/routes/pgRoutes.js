@@ -28,6 +28,7 @@ router.post('/:pgId/rooms', rbacMiddleware_1.canAccessPG, pgController_1.createR
 router.get('/:pgId/rooms/:roomId/history', rbacMiddleware_1.canAccessPG, pgController_1.getRoomHistory);
 // Operations Mutations
 router.post('/:pgId/tenants/:tenantId/pay-rent', rbacMiddleware_1.canAccessPG, pgController_1.payRent);
+router.post('/:pgId/tenants/:tenantId/pay-deposit', rbacMiddleware_1.canAccessPG, pgController_1.payDeposit);
 router.post('/:pgId/complaints', rbacMiddleware_1.canAccessPG, pgController_1.createComplaint);
 router.post('/:pgId/complaints/:complaintId/resolve', rbacMiddleware_1.canAccessPG, pgController_1.resolveComplaint);
 router.get('/:pgId/complaints', rbacMiddleware_1.canAccessPG, pgController_1.getPGComplaints);

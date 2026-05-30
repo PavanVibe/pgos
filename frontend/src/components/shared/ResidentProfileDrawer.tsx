@@ -84,13 +84,32 @@ export default function ResidentProfileDrawer() {
     .filter((inv: any) => inv.type === 'RENT' && inv.status !== 'PAID')
     .reduce((sum: number, inv: any) => sum + inv.amount, 0);
     
-  const securityDepositHeld = invoices
+  const collectedDeposit = invoices
     .filter((inv: any) => inv.type === 'SECURITY_DEPOSIT' && inv.status === 'PAID')
     .reduce((sum: number, inv: any) => sum + inv.amount, 0);
+
+  const remainingDeposit = Math.max(0, (profile?.securityDeposit ?? 0) - collectedDeposit);
+
+  const totalPayments = totalRentPaid + collectedDeposit;
 
   const outstandingTotal = invoices
     .filter((inv: any) => inv.status !== 'PAID')
     .reduce((sum: number, inv: any) => sum + inv.amount, 0);
+
+  // Status mapping
+  const getDepositStatusLabel = () => {
+    if (profile?.depositRefundedAt) return 'Refunded';
+    if (profile?.securityDepositStatus === 'COLLECTED') return 'Collected';
+    if (profile?.securityDepositStatus === 'PARTIALLY_PAID') return 'Partially Paid';
+    return 'Pending';
+  };
+
+  const getDepositStatusColor = () => {
+    if (profile?.depositRefundedAt) return 'text-purple-400 bg-purple-500/10 border-purple-500/15';
+    if (profile?.securityDepositStatus === 'COLLECTED') return 'text-green-400 bg-green-500/10 border-green-500/15';
+    if (profile?.securityDepositStatus === 'PARTIALLY_PAID') return 'text-blue-400 bg-blue-500/10 border-blue-500/15';
+    return 'text-amber-400 bg-amber-500/10 border-amber-500/15';
+  };
 
   const complaints = profile?.complaints || [];
 
@@ -226,7 +245,7 @@ export default function ResidentProfileDrawer() {
                 <div className="space-y-3">
                   <h5 className="text-[11px] font-black uppercase tracking-widest text-zinc-500 flex items-center gap-1.5">
                     <ShieldCheck className="h-3.5 w-3.5" />
-                    Security Deposit
+                    Security Deposit Card
                   </h5>
                   <div className="bg-zinc-950 p-4 border border-zinc-900 rounded-xl space-y-4">
                     <div className="flex justify-between items-center border-b border-zinc-900/60 pb-3">
@@ -237,17 +256,27 @@ export default function ResidentProfileDrawer() {
                         </span>
                       </div>
                       <span className={`text-[10px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded border inline-block
-                        ${profile.securityDepositStatus === 'COLLECTED' 
-                          ? 'text-green-400 bg-green-500/10 border-green-500/15' 
-                          : 'text-amber-400 bg-amber-500/10 border-amber-500/15'}`}
+                        ${getDepositStatusColor()}`}
                       >
-                        {profile.securityDepositStatus === 'COLLECTED' ? 'Collected' : 'Pending'}
+                        {getDepositStatusLabel()}
                       </span>
                     </div>
 
                     <div className="grid grid-cols-2 gap-4 text-xs">
                       <div>
-                        <span className="text-[9px] text-zinc-500 block uppercase tracking-wider font-bold">Collected On</span>
+                        <span className="text-[9px] text-zinc-500 block uppercase tracking-wider font-bold">Collected Amount</span>
+                        <span className="font-extrabold text-green-400 block mt-0.5">
+                          ₹{collectedDeposit.toLocaleString('en-IN')}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[9px] text-zinc-500 block uppercase tracking-wider font-bold">Remaining Amount</span>
+                        <span className="font-extrabold text-amber-500 block mt-0.5">
+                          ₹{remainingDeposit.toLocaleString('en-IN')}
+                        </span>
+                      </div>
+                      <div className="pt-3 border-t border-zinc-900/60">
+                        <span className="text-[9px] text-zinc-500 block uppercase tracking-wider font-bold">Collected Date</span>
                         <span className="font-extrabold text-zinc-300 block mt-0.5">
                           {profile.depositCollectedAt 
                             ? new Date(profile.depositCollectedAt).toLocaleDateString('en-IN', {
@@ -258,10 +287,10 @@ export default function ResidentProfileDrawer() {
                             : 'N/A'}
                         </span>
                       </div>
-                      <div>
+                      <div className="pt-3 border-t border-zinc-900/60">
                         <span className="text-[9px] text-zinc-500 block uppercase tracking-wider font-bold">Payment Mode</span>
                         <span className="font-extrabold text-zinc-300 block mt-0.5 uppercase">
-                          {profile.invoices.find((inv: any) => inv.type === 'SECURITY_DEPOSIT' && inv.status === 'PAID')?.paymentMode || 'N/A'}
+                          {invoices.find((inv: any) => inv.type === 'SECURITY_DEPOSIT' && inv.status === 'PAID')?.paymentMode || 'N/A'}
                         </span>
                       </div>
                       <div className="pt-3 border-t border-zinc-900/60 col-span-2">
@@ -277,6 +306,95 @@ export default function ResidentProfileDrawer() {
                         </span>
                       </div>
                     </div>
+                  </div>
+                </div>
+
+                {/* Resident Financial Summary */}
+                <div className="space-y-3">
+                  <h5 className="text-[11px] font-black uppercase tracking-widest text-zinc-500 flex items-center gap-1.5">
+                    <DollarSign className="h-3.5 w-3.5" />
+                    Resident Financial Summary
+                  </h5>
+                  <div className="grid grid-cols-3 gap-2.5 bg-zinc-950 p-4 border border-zinc-900 rounded-xl text-xs font-semibold">
+                    <div className="space-y-0.5">
+                      <span className="text-[8px] text-zinc-500 block uppercase font-bold tracking-wider">Rent Paid</span>
+                      <span className="text-emerald-400 text-sm font-black">₹{totalRentPaid.toLocaleString('en-IN')}</span>
+                    </div>
+                    <div className="space-y-0.5 border-l border-zinc-900 pl-2.5">
+                      <span className="text-[8px] text-zinc-500 block uppercase font-bold tracking-wider">Deposit Paid</span>
+                      <span className="text-blue-400 text-sm font-black">₹{collectedDeposit.toLocaleString('en-IN')}</span>
+                    </div>
+                    <div className="space-y-0.5 border-l border-zinc-900 pl-2.5">
+                      <span className="text-[8px] text-zinc-500 block uppercase font-bold tracking-wider">Total Payments</span>
+                      <span className="text-primary text-sm font-black">₹{totalPayments.toLocaleString('en-IN')}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Deposit Transaction History */}
+                <div className="space-y-3">
+                  <h5 className="text-[11px] font-black uppercase tracking-widest text-zinc-500 flex items-center gap-1.5">
+                    <ListTodo className="h-3.5 w-3.5" />
+                    Deposit Transaction History
+                  </h5>
+                  <div className="bg-zinc-950 p-4 border border-zinc-900 rounded-xl space-y-3 max-h-48 overflow-y-auto scrollbar-none">
+                    {invoices.filter((inv: any) => inv.type === 'SECURITY_DEPOSIT').length === 0 && !profile.depositRefundedAt ? (
+                      <div className="text-center text-[10px] text-zinc-500 font-bold uppercase tracking-wider py-4">
+                        No deposit transaction history found.
+                      </div>
+                    ) : (
+                      <>
+                        {invoices
+                          .filter((inv: any) => inv.type === 'SECURITY_DEPOSIT')
+                          .map((inv: any) => {
+                            const isSplitAdjustment = inv.razorpayOrdId?.startsWith('split_parent_deposit:');
+                            return (
+                              <div key={inv.id} className="p-3 border border-zinc-900/80 bg-zinc-950/40 rounded-lg flex flex-col gap-1 text-xs">
+                                <div className="flex justify-between items-start">
+                                  <span className="font-extrabold text-zinc-200">
+                                    {isSplitAdjustment 
+                                      ? 'Deposit Split Adjustment' 
+                                      : inv.status === 'PAID' 
+                                      ? 'Deposit Collection Entry' 
+                                      : 'Deposit Pending Request'}
+                                  </span>
+                                  <span className="font-black text-zinc-150">₹{inv.amount.toLocaleString('en-IN')}</span>
+                                </div>
+                                <div className="flex justify-between items-center text-[9px] text-zinc-500 font-bold uppercase tracking-wider">
+                                  <span>Date: {new Date(inv.createdAt).toLocaleDateString('en-IN')}</span>
+                                  <span className={inv.status === 'PAID' ? 'text-green-400' : 'text-amber-400'}>
+                                    {inv.status}
+                                  </span>
+                                </div>
+                                {inv.status === 'PAID' && inv.paymentMode && (
+                                  <div className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider mt-1 pt-1 border-t border-zinc-900/60">
+                                    Paid via <span className="text-zinc-300">{inv.paymentMode}</span>
+                                    {inv.referenceId && ` (Ref: ${inv.referenceId})`}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+
+                        {profile.depositRefundedAt && (
+                          <div className="p-3 border border-zinc-900/80 bg-zinc-950/40 rounded-lg flex flex-col gap-1 text-xs">
+                            <div className="flex justify-between items-start">
+                              <span className="font-extrabold text-purple-400">Security Deposit Refunded</span>
+                              <span className="font-black text-purple-300">₹{(profile.depositRefundedAmount ?? 0).toLocaleString('en-IN')}</span>
+                            </div>
+                            <div className="flex justify-between items-center text-[9px] text-zinc-500 font-bold uppercase tracking-wider">
+                              <span>Date: {new Date(profile.depositRefundedAt).toLocaleDateString('en-IN')}</span>
+                              <span className="text-purple-455 text-purple-400">REFUNDED</span>
+                            </div>
+                            {profile.depositRefundMode && (
+                              <div className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider mt-1 pt-1 border-t border-zinc-900/60">
+                                Mode: <span className="text-zinc-300 uppercase">{profile.depositRefundMode}</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </>
+                    )}
                   </div>
                 </div>
 

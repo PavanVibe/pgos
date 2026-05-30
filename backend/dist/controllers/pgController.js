@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.saveTenantNoteManual = exports.sendReminderManual = exports.getOverdueResidentsManual = exports.scanOverdueManual = exports.generateInvoicesManual = exports.getRoomHistory = exports.getPGComplaint = exports.getPGComplaints = exports.resolveComplaint = exports.createComplaint = exports.payRent = exports.getPGRooms = exports.allocateBedController = exports.createRoom = exports.getOrganizationPGs = exports.createPG = void 0;
+exports.saveTenantNoteManual = exports.sendReminderManual = exports.getOverdueResidentsManual = exports.scanOverdueManual = exports.generateInvoicesManual = exports.getRoomHistory = exports.getPGComplaint = exports.getPGComplaints = exports.resolveComplaint = exports.createComplaint = exports.payDeposit = exports.payRent = exports.getPGRooms = exports.allocateBedController = exports.createRoom = exports.getOrganizationPGs = exports.createPG = void 0;
 const client_1 = require("@prisma/client");
 const prisma_1 = __importDefault(require("../utils/prisma"));
 const bedService_1 = require("../services/bedService");
@@ -196,6 +196,29 @@ const payRent = async (req, res) => {
     }
 };
 exports.payRent = payRent;
+const PayDepositWorkflow_1 = require("../services/workflows/PayDepositWorkflow");
+const payDeposit = async (req, res) => {
+    try {
+        const pgId = req.pg?.id || req.params.pgId;
+        const { tenantId } = req.params;
+        const { amount, referenceId, invoiceId } = req.body;
+        const actorId = req.auth?.userId || 'system';
+        let paymentMode = req.body.paymentMode;
+        if (req.body.method && !req.body.paymentMode) {
+            paymentMode = req.body.method;
+        }
+        if (!paymentMode || (paymentMode !== 'upi' && paymentMode !== 'cash' && paymentMode !== 'bank_transfer')) {
+            return res.status(400).json({ error: 'Valid payment method (upi/cash/bank_transfer) is required.' });
+        }
+        const parsedAmount = amount !== undefined && amount !== null ? parseFloat(amount) : undefined;
+        const updatedInvoice = await PayDepositWorkflow_1.PayDepositWorkflow.execute(pgId, tenantId, paymentMode, actorId, parsedAmount, invoiceId, referenceId);
+        res.status(200).json({ status: 'success', data: updatedInvoice });
+    }
+    catch (error) {
+        res.status(400).json({ error: error.message });
+    }
+};
+exports.payDeposit = payDeposit;
 /**
  * Creates a new complaint for a PG room/area.
  */

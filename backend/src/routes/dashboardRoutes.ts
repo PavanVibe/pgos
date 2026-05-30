@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { getTasks, getOccupancy, getActivity } from '../controllers/dashboardDataController';
-import { getCollectionsHistory, getMonthlyCollectionLedger } from '../controllers/collectionsController';
+import { getCollectionsHistory, getMonthlyCollectionLedger, getDepositLedger } from '../controllers/collectionsController';
 import { requireAuth, attachOrgContext } from '../middlewares/authMiddleware';
 import { canAccessPG } from '../middlewares/rbacMiddleware';
 
@@ -14,5 +14,6 @@ router.get('/occupancy', getOccupancy);
 router.get('/activity', getActivity);
 router.get('/collections-history', getCollectionsHistory);
 router.get('/collections-history/:year/:month', getMonthlyCollectionLedger);
+router.get('/deposits/ledger', getDepositLedger);
 
 export default router;

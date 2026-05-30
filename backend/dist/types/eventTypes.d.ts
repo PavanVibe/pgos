@@ -5,6 +5,7 @@ export declare enum EventType {
     COMPLAINT_CREATED = "COMPLAINT_CREATED",
     COMPLAINT_RESOLVED = "COMPLAINT_RESOLVED",
     BED_ALLOCATED = "BED_ALLOCATED",
-    BED_VACATED = "BED_VACATED"
+    BED_VACATED = "BED_VACATED",
+    DEPOSIT_PAID = "DEPOSIT_PAID"
 }
 //# sourceMappingURL=eventTypes.d.ts.map

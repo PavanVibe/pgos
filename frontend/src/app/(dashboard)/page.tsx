@@ -9,6 +9,7 @@ import QuickActions from "@/components/dashboard/QuickActions";
 import TodaysTasksPanel from "@/components/dashboard/TodaysTasksPanel";
 import PendingCollectionsCard from "@/components/dashboard/PendingCollectionsCard";
 import MonthlyCollectionCard from "@/components/dashboard/MonthlyCollectionCard";
+import SecurityDepositsCard from "@/components/dashboard/SecurityDepositsCard";
 import OccupancySummaryCard from "@/components/dashboard/OccupancySummaryCard";
 import OnboardingSheet from "@/components/onboarding/OnboardingSheet";
 import MarkPaidSheet from "@/components/rent/MarkPaidSheet";
@@ -108,6 +109,7 @@ export default function DashboardPage() {
             <div className="space-y-6">
               <MonthlyCollectionCard pgId={activePgId} />
               <PendingCollectionsCard pgId={activePgId} />
+              <SecurityDepositsCard pgId={activePgId} />
               <OccupancySummaryCard pgId={activePgId} />
               <ActivityFeed pgId={activePgId} />
             </div>

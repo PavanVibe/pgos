@@ -8,6 +8,7 @@ export declare const allocateBedController: (req: Request, res: Response) => Pro
  */
 export declare const getPGRooms: (req: Request, res: Response) => Promise<void>;
 export declare const payRent: (req: Request, res: Response) => Promise<Response<any, Record<string, any>> | undefined>;
+export declare const payDeposit: (req: Request, res: Response) => Promise<Response<any, Record<string, any>> | undefined>;
 /**
  * Creates a new complaint for a PG room/area.
  */

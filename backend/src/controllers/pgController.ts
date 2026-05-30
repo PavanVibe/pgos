@@ -215,6 +215,41 @@ export const payRent = async (req: Request, res: Response) => {
   }
 };
 
+import { PayDepositWorkflow } from '../services/workflows/PayDepositWorkflow';
+
+export const payDeposit = async (req: Request, res: Response) => {
+  try {
+    const pgId = (req as any).pg?.id || req.params.pgId;
+    const { tenantId } = req.params;
+    const { amount, referenceId, invoiceId } = req.body;
+    const actorId = (req as any).auth?.userId || 'system';
+
+    let paymentMode = req.body.paymentMode;
+    if (req.body.method && !req.body.paymentMode) {
+      paymentMode = req.body.method;
+    }
+
+    if (!paymentMode || (paymentMode !== 'upi' && paymentMode !== 'cash' && paymentMode !== 'bank_transfer')) {
+      return res.status(400).json({ error: 'Valid payment method (upi/cash/bank_transfer) is required.' });
+    }
+
+    const parsedAmount = amount !== undefined && amount !== null ? parseFloat(amount) : undefined;
+
+    const updatedInvoice = await PayDepositWorkflow.execute(
+      pgId as string, 
+      tenantId as string, 
+      paymentMode, 
+      actorId, 
+      parsedAmount,
+      invoiceId as string | undefined,
+      referenceId as string | undefined
+    );
+    res.status(200).json({ status: 'success', data: updatedInvoice });
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
 /**
  * Creates a new complaint for a PG room/area.
  */

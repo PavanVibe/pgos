@@ -22,7 +22,10 @@ export const getPGDashboardSummary = async (pgId: string, orgId: string) => {
     expenses,
     overdueInvoicesCount,
     unpaidInvoicesCount,
-    overdueInvoicesSum
+    overdueInvoicesSum,
+    collectedDepositsSum,
+    pendingDepositsSum,
+    refundLiabilitySum
   ] = await Promise.all([
     // Total Beds (Soft delete filter applies automatically via Prisma Extension)
     prisma.bed.count({
@@ -91,6 +94,34 @@ export const getPGDashboardSummary = async (pgId: string, orgId: string) => {
         type: 'RENT'
       },
       _sum: { amount: true }
+    }),
+    // Collected Deposits (Total Deposits Held)
+    prisma.rentInvoice.aggregate({
+      where: {
+        tenantProfile: { pgId },
+        type: 'SECURITY_DEPOSIT',
+        status: 'PAID',
+        isActive: true
+      },
+      _sum: { amount: true }
+    }),
+    // Pending Deposits
+    prisma.rentInvoice.aggregate({
+      where: {
+        tenantProfile: { pgId },
+        type: 'SECURITY_DEPOSIT',
+        status: { in: ['PENDING', 'PAST_DUE'] },
+        isActive: true
+      },
+      _sum: { amount: true }
+    }),
+    // Refund Liability (Refunded Deposits)
+    prisma.pGTenantProfile.aggregate({
+      where: {
+        pgId,
+        isActive: true
+      },
+      _sum: { depositRefundedAmount: true }
     })
   ]);
 
@@ -174,6 +205,9 @@ export const getPGDashboardSummary = async (pgId: string, orgId: string) => {
     monthlyExpenses: expenses._sum.amount || 0,
     collectedThisMonth,
     payingResidentsCount,
-    collectedLastMonth
+    collectedLastMonth,
+    collectedDeposits: collectedDepositsSum._sum.amount || 0,
+    pendingDeposits: pendingDepositsSum._sum.amount || 0,
+    refundLiability: Math.max(0, (collectedDepositsSum._sum.amount || 0) - (refundLiabilitySum._sum.depositRefundedAmount || 0))
   };
 };

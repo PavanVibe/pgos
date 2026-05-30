@@ -13,5 +13,6 @@ router.get('/occupancy', dashboardDataController_1.getOccupancy);
 router.get('/activity', dashboardDataController_1.getActivity);
 router.get('/collections-history', collectionsController_1.getCollectionsHistory);
 router.get('/collections-history/:year/:month', collectionsController_1.getMonthlyCollectionLedger);
+router.get('/deposits/ledger', collectionsController_1.getDepositLedger);
 exports.default = router;
 //# sourceMappingURL=dashboardRoutes.js.map

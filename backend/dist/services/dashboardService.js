@@ -16,7 +16,7 @@ const getPGDashboardSummary = async (pgId, orgId) => {
         throw new Error('PG not found or access denied.');
     }
     // Execute aggregations in parallel
-    const [totalBeds, occupiedBeds, pendingInvoices, unresolvedComplaints, highPriorityComplaints, expenses, overdueInvoicesCount, unpaidInvoicesCount, overdueInvoicesSum] = await Promise.all([
+    const [totalBeds, occupiedBeds, pendingInvoices, unresolvedComplaints, highPriorityComplaints, expenses, overdueInvoicesCount, unpaidInvoicesCount, overdueInvoicesSum, collectedDepositsSum, pendingDepositsSum, refundLiabilitySum] = await Promise.all([
         // Total Beds (Soft delete filter applies automatically via Prisma Extension)
         prisma_1.default.bed.count({
             where: { room: { pgId } }
@@ -84,6 +84,34 @@ const getPGDashboardSummary = async (pgId, orgId) => {
                 type: 'RENT'
             },
             _sum: { amount: true }
+        }),
+        // Collected Deposits (Total Deposits Held)
+        prisma_1.default.rentInvoice.aggregate({
+            where: {
+                tenantProfile: { pgId },
+                type: 'SECURITY_DEPOSIT',
+                status: 'PAID',
+                isActive: true
+            },
+            _sum: { amount: true }
+        }),
+        // Pending Deposits
+        prisma_1.default.rentInvoice.aggregate({
+            where: {
+                tenantProfile: { pgId },
+                type: 'SECURITY_DEPOSIT',
+                status: { in: ['PENDING', 'PAST_DUE'] },
+                isActive: true
+            },
+            _sum: { amount: true }
+        }),
+        // Refund Liability (Refunded Deposits)
+        prisma_1.default.pGTenantProfile.aggregate({
+            where: {
+                pgId,
+                isActive: true
+            },
+            _sum: { depositRefundedAmount: true }
         })
     ]);
     console.log(`[getPGDashboardSummary] pgId: ${pgId}, pendingRent: ${pendingInvoices._sum.amount || 0}, unpaidInvoicesCount: ${unpaidInvoicesCount}, overdueRent: ${overdueInvoicesSum._sum.amount || 0}, overdueCount: ${overdueInvoicesCount}`);
@@ -157,7 +185,10 @@ const getPGDashboardSummary = async (pgId, orgId) => {
         monthlyExpenses: expenses._sum.amount || 0,
         collectedThisMonth,
         payingResidentsCount,
-        collectedLastMonth
+        collectedLastMonth,
+        collectedDeposits: collectedDepositsSum._sum.amount || 0,
+        pendingDeposits: pendingDepositsSum._sum.amount || 0,
+        refundLiability: Math.max(0, (collectedDepositsSum._sum.amount || 0) - (refundLiabilitySum._sum.depositRefundedAmount || 0))
     };
 };
 exports.getPGDashboardSummary = getPGDashboardSummary;

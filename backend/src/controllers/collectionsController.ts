@@ -196,3 +196,76 @@ export const getMonthlyCollectionLedger = async (req: Request, res: Response) =>
     res.status(400).json({ error: error.message });
   }
 };
+
+export const getDepositLedger = async (req: Request, res: Response) => {
+  try {
+    const pgId = (req as any).pg?.id || req.params.pgId;
+    if (!pgId) {
+      return res.status(400).json({ error: 'PG ID context is required.' });
+    }
+
+    const profiles = await prisma.pGTenantProfile.findMany({
+      where: {
+        pgId,
+        isActive: true,
+      },
+      include: {
+        globalTenant: {
+          select: {
+            name: true,
+            phone: true,
+          },
+        },
+        room: {
+          select: {
+            number: true,
+          },
+        },
+        bed: {
+          select: {
+            bedNumber: true,
+          },
+        },
+        invoices: {
+          where: {
+            type: 'SECURITY_DEPOSIT',
+            isActive: true,
+          },
+        },
+      },
+      orderBy: {
+        moveInDate: 'desc',
+      },
+    });
+
+    const ledger = profiles.map((profile) => {
+      const depositInvoice = profile.invoices.find(
+        (inv) => inv.type === 'SECURITY_DEPOSIT' && inv.status !== 'PAID'
+      ) || profile.invoices.find((inv) => inv.type === 'SECURITY_DEPOSIT');
+      
+      return {
+        id: profile.id,
+        residentName: profile.globalTenant.name || 'Unknown',
+        phone: profile.globalTenant.phone,
+        roomNumber: profile.room?.number || profile.historicalRoomNumber || '-',
+        bedNumber: profile.bed?.bedNumber || profile.historicalBedNumber || '-',
+        depositAmount: profile.securityDeposit,
+        status: profile.securityDepositStatus, // COLLECTED / PENDING / PARTIALLY_PAID
+        collectedDate: profile.depositCollectedAt || null,
+        paymentMode: depositInvoice?.status === 'PAID' ? depositInvoice?.paymentMode : null,
+        refundStatus: profile.depositRefundedAt ? 'REFUNDED' : 'NOT_REFUNDED',
+        refundedAmount: profile.depositRefundedAmount || null,
+        refundedAt: profile.depositRefundedAt || null,
+        refundMode: profile.depositRefundMode || null,
+        tenantStatus: profile.status, // ACTIVE / PAST / NOTICE
+        invoiceId: (depositInvoice && depositInvoice.status !== 'PAID') ? depositInvoice.id : null,
+        invoiceDueDate: depositInvoice?.dueDate || null,
+        pendingAmount: (depositInvoice && depositInvoice.status !== 'PAID') ? depositInvoice.amount : 0
+      };
+    });
+
+    res.status(200).json({ status: 'success', data: ledger });
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+};

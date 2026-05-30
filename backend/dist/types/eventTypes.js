@@ -10,5 +10,6 @@ var EventType;
     EventType["COMPLAINT_RESOLVED"] = "COMPLAINT_RESOLVED";
     EventType["BED_ALLOCATED"] = "BED_ALLOCATED";
     EventType["BED_VACATED"] = "BED_VACATED";
+    EventType["DEPOSIT_PAID"] = "DEPOSIT_PAID";
 })(EventType || (exports.EventType = EventType = {}));
 //# sourceMappingURL=eventTypes.js.map
