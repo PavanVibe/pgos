@@ -294,17 +294,118 @@ export default function ResidentProfileDrawer() {
                         </span>
                       </div>
                       <div className="pt-3 border-t border-zinc-900/60 col-span-2">
-                        <span className="text-[9px] text-zinc-500 block uppercase tracking-wider font-bold">Refund Status</span>
-                        <span className="font-extrabold text-zinc-300 block mt-0.5">
+                        <span className="text-[9px] text-zinc-500 block uppercase tracking-wider font-bold">Refund & Settlement Summary</span>
+                        <span className="font-extrabold text-zinc-300 block mt-0.5 leading-normal">
                           {profile.depositRefundedAt ? (
-                            <span className="text-amber-400">
-                              Refunded ₹{profile.depositRefundedAmount?.toLocaleString('en-IN')} via {profile.depositRefundMode} on {new Date(profile.depositRefundedAt).toLocaleDateString('en-IN')}
+                            <span className="text-purple-400">
+                              Refunded ₹{profile.depositRefundedAmount?.toLocaleString('en-IN')} via <span className="uppercase">{profile.depositRefundMode}</span> on {new Date(profile.depositRefundedAt).toLocaleDateString('en-IN')}
+                              {profile.depositDeductionAmount > 0 && ` (Deduction: ₹${profile.depositDeductionAmount.toLocaleString('en-IN')})`}
                             </span>
                           ) : (
-                            <span className="text-zinc-500">Not Refunded</span>
+                            <span className="text-zinc-500">No refunds processed yet.</span>
                           )}
                         </span>
                       </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2.6 SECURITY DEPOSIT TIMELINE */}
+                <div className="space-y-3">
+                  <h5 className="text-[11px] font-black uppercase tracking-widest text-zinc-500 flex items-center gap-1.5">
+                    <Clock className="h-3.5 w-3.5" />
+                    Security Deposit Timeline
+                  </h5>
+                  <div className="bg-zinc-950 p-5 border border-zinc-900 rounded-xl space-y-5 relative">
+                    {/* Vertical Connecting Line */}
+                    <div className="absolute left-7 top-6 bottom-6 w-0.5 bg-zinc-900" />
+
+                    {/* Step 1: Configured/Expected */}
+                    <div className="relative flex gap-4 text-xs">
+                      <div className="flex h-5 w-5 items-center justify-center rounded-full bg-zinc-900 border border-zinc-800 text-[10px] font-bold text-zinc-400 z-10">
+                        1
+                      </div>
+                      <div className="space-y-1">
+                        <span className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider block">
+                          {new Date(profile.moveInDate).toLocaleDateString('en-IN', {
+                            day: '2-digit',
+                            month: 'short',
+                            year: 'numeric'
+                          })}
+                        </span>
+                        <span className="font-extrabold text-zinc-200 block">Deposit Configured</span>
+                        <span className="text-[11px] text-zinc-400 block">
+                          Expected Deposit: ₹{(profile.securityDeposit ?? 0).toLocaleString('en-IN')}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Step 2: Collected */}
+                    {(profile.securityDepositStatus === 'COLLECTED' || profile.securityDepositStatus === 'PARTIALLY_REFUNDED' || profile.securityDepositStatus === 'REFUNDED' || collectedDeposit > 0) && (
+                      <div className="relative flex gap-4 text-xs">
+                        <div className="flex h-5 w-5 items-center justify-center rounded-full bg-green-500/10 border border-green-500/30 text-[10px] font-bold text-green-400 z-10">
+                          2
+                        </div>
+                        <div className="space-y-1">
+                          <span className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider block">
+                            {profile.depositCollectedAt 
+                              ? new Date(profile.depositCollectedAt).toLocaleDateString('en-IN', {
+                                  day: '2-digit',
+                                  month: 'short',
+                                  year: 'numeric'
+                                })
+                              : new Date(profile.moveInDate).toLocaleDateString('en-IN', {
+                                  day: '2-digit',
+                                  month: 'short',
+                                  year: 'numeric'
+                                })}
+                          </span>
+                          <span className="font-extrabold text-zinc-200 block">Deposit Collected</span>
+                          <span className="text-[11px] text-zinc-400 block">
+                            ₹{collectedDeposit.toLocaleString('en-IN')} via <span className="uppercase text-zinc-300">{invoices.find((inv: any) => inv.type === 'SECURITY_DEPOSIT' && inv.status === 'PAID')?.paymentMode || 'UPI'}</span>
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Step 3: Refunded/Deducted */}
+                    {(profile.depositRefundedAt || (profile.depositDeductionAmount && profile.depositDeductionAmount > 0)) && (
+                      <div className="relative flex gap-4 text-xs">
+                        <div className="flex h-5 w-5 items-center justify-center rounded-full bg-purple-500/10 border border-purple-500/30 text-[10px] font-bold text-purple-400 z-10">
+                          3
+                        </div>
+                        <div className="space-y-1">
+                          <span className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider block">
+                            {profile.depositRefundedAt && new Date(profile.depositRefundedAt).toLocaleDateString('en-IN', {
+                              day: '2-digit',
+                              month: 'short',
+                              year: 'numeric'
+                            })}
+                          </span>
+                          <span className="font-extrabold text-zinc-200 block">Deposit Refunded</span>
+                          <span className="text-[11px] text-zinc-400 block">
+                            ₹{(profile.depositRefundedAmount ?? 0).toLocaleString('en-IN')} via <span className="uppercase text-zinc-350">{profile.depositRefundMode || 'UPI'}</span>
+                          </span>
+                          {profile.depositDeductionAmount && profile.depositDeductionAmount > 0 ? (
+                            <span className="block text-[11px] text-red-400 font-semibold mt-0.5">
+                              Damage Deduction: ₹{profile.depositDeductionAmount.toLocaleString('en-IN')}
+                            </span>
+                          ) : null}
+                          {profile.depositRefundNotes && (
+                            <p className="text-[10px] text-zinc-500 italic mt-1 leading-normal border-l border-zinc-800 pl-2">
+                              Note: {profile.depositRefundNotes}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Timeline Status */}
+                    <div className="pt-2 border-t border-zinc-900/60 flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-zinc-500">
+                      <span>Timeline Status</span>
+                      <span className={profile.securityDepositStatus === 'REFUNDED' ? 'text-zinc-500' : 'text-purple-400'}>
+                        {profile.securityDepositStatus === 'REFUNDED' ? 'Closed' : 'Open'}
+                      </span>
                     </div>
                   </div>
                 </div>

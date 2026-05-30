@@ -25,7 +25,8 @@ export const getPGDashboardSummary = async (pgId: string, orgId: string) => {
     overdueInvoicesSum,
     collectedDepositsSum,
     pendingDepositsSum,
-    refundLiabilitySum
+    refundLiabilitySum,
+    pendingRefundResidentsCount
   ] = await Promise.all([
     // Total Beds (Soft delete filter applies automatically via Prisma Extension)
     prisma.bed.count({
@@ -122,6 +123,15 @@ export const getPGDashboardSummary = async (pgId: string, orgId: string) => {
         isActive: true
       },
       _sum: { depositRefundedAmount: true }
+    }),
+    // Pending Refund Residents (HISTORICAL profiles awaiting refund)
+    prisma.pGTenantProfile.count({
+      where: {
+        pgId,
+        status: 'PAST',
+        securityDepositStatus: { in: ['COLLECTED', 'PARTIALLY_REFUNDED'] },
+        isActive: true
+      }
     })
   ]);
 
@@ -208,6 +218,8 @@ export const getPGDashboardSummary = async (pgId: string, orgId: string) => {
     collectedLastMonth,
     collectedDeposits: collectedDepositsSum._sum.amount || 0,
     pendingDeposits: pendingDepositsSum._sum.amount || 0,
-    refundLiability: Math.max(0, (collectedDepositsSum._sum.amount || 0) - (refundLiabilitySum._sum.depositRefundedAmount || 0))
+    refundedDeposits: refundLiabilitySum._sum.depositRefundedAmount || 0,
+    refundLiability: Math.max(0, (collectedDepositsSum._sum.amount || 0) - (refundLiabilitySum._sum.depositRefundedAmount || 0)),
+    pendingRefundResidents: pendingRefundResidentsCount
   };
 };

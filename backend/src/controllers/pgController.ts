@@ -250,6 +250,105 @@ export const payDeposit = async (req: Request, res: Response) => {
   }
 };
 
+export const refundDeposit = async (req: Request, res: Response) => {
+  try {
+    const pgId = (req as any).pg?.id || req.params.pgId;
+    const { tenantId } = req.params;
+    const { refundAmount, paymentMode, refundDate, notes } = req.body;
+    const actorId = (req as any).auth?.userId || 'system';
+
+    if (!paymentMode || (paymentMode !== 'upi' && paymentMode !== 'cash' && paymentMode !== 'bank_transfer')) {
+      return res.status(400).json({ error: 'Valid payment method (upi/cash/bank_transfer) is required.' });
+    }
+
+    if (refundAmount === undefined || refundAmount === null || parseFloat(refundAmount) < 0) {
+      return res.status(400).json({ error: 'Valid refund amount is required.' });
+    }
+
+    const parsedRefundAmount = parseFloat(refundAmount);
+
+    const result = await prisma.$transaction(async (tx) => {
+      // 1. Fetch tenant profile
+      const profile = await tx.pGTenantProfile.findUnique({
+        where: { id: tenantId as string },
+        include: {
+          invoices: {
+            where: {
+              type: 'SECURITY_DEPOSIT',
+              status: 'PAID',
+              isActive: true
+            }
+          }
+        }
+      });
+
+      if (!profile) {
+        throw new Error('Resident stay profile not found.');
+      }
+
+      // Compute total collected deposit
+      const totalCollectedDeposit = profile.invoices.reduce((sum, inv) => sum + inv.amount, 0);
+
+      // Refund Eligibility: Process Refund button should ONLY be visible when stay status is PAST (HISTORICAL)
+      if (profile.status === 'ACTIVE' || profile.status === 'NOTICE') {
+        throw new Error('Deposit refunds can only be processed for historical (vacated) residents.');
+      }
+
+      if (parsedRefundAmount > totalCollectedDeposit) {
+        throw new Error(`Refund amount cannot exceed collected deposit of ₹${totalCollectedDeposit}.`);
+      }
+
+      const deductionAmount = Math.max(0, totalCollectedDeposit - parsedRefundAmount);
+
+      // Status mapping based on refundAmount and deduction
+      let newStatus = profile.securityDepositStatus;
+      if (parsedRefundAmount === totalCollectedDeposit) {
+        newStatus = 'REFUNDED';
+      } else {
+        newStatus = 'PARTIALLY_REFUNDED';
+      }
+
+      // 2. Update profile
+      const updatedProfile = await tx.pGTenantProfile.update({
+        where: { id: tenantId as string },
+        data: {
+          securityDepositStatus: newStatus,
+          depositRefundedAmount: parsedRefundAmount,
+          depositDeductionAmount: deductionAmount,
+          depositRefundedAt: refundDate ? new Date(refundDate) : new Date(),
+          depositRefundMode: paymentMode,
+          depositRefundNotes: notes || null,
+          updatedBy: actorId
+        }
+      });
+
+      // 3. Write Audit Log
+      await tx.auditLog.create({
+        data: {
+          actorId,
+          action: 'DEPOSIT_REFUNDED',
+          entityType: 'PGTenantProfile',
+          entityId: profile.id,
+          metadata: {
+            pgId,
+            tenantId,
+            refundAmount: parsedRefundAmount,
+            deductionAmount,
+            paymentMode,
+            notes
+          }
+        }
+      });
+
+      return updatedProfile;
+    });
+
+    res.status(200).json({ status: 'success', data: result });
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
 /**
  * Creates a new complaint for a PG room/area.
  */

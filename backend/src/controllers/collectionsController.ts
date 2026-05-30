@@ -280,6 +280,11 @@ export const getDepositLedger = async (req: Request, res: Response) => {
       const depositInvoice = profile.invoices.find(
         (inv) => inv.type === 'SECURITY_DEPOSIT' && inv.status !== 'PAID'
       ) || profile.invoices.find((inv) => inv.type === 'SECURITY_DEPOSIT');
+
+      const paidDepositInvoices = profile.invoices.filter(
+        (inv) => inv.type === 'SECURITY_DEPOSIT' && inv.status === 'PAID'
+      );
+      const collectedAmount = paidDepositInvoices.reduce((sum, inv) => sum + inv.amount, 0);
       
       return {
         id: profile.id,
@@ -288,13 +293,18 @@ export const getDepositLedger = async (req: Request, res: Response) => {
         roomNumber: profile.room?.number || profile.historicalRoomNumber || '-',
         bedNumber: profile.bed?.bedNumber || profile.historicalBedNumber || '-',
         depositAmount: profile.securityDeposit,
-        status: profile.securityDeposit === 0 ? 'NO_DEPOSIT_REQUIRED' : profile.securityDepositStatus, // COLLECTED / PENDING / PARTIALLY_PAID / NO_DEPOSIT_REQUIRED
+        status: profile.securityDeposit === 0 ? 'NO_DEPOSIT_REQUIRED' : profile.securityDepositStatus, // COLLECTED / PENDING / PARTIALLY_PAID / NO_DEPOSIT_REQUIRED / PARTIALLY_REFUNDED / REFUNDED
         collectedDate: profile.depositCollectedAt || null,
-        paymentMode: depositInvoice?.status === 'PAID' ? depositInvoice?.paymentMode : null,
-        refundStatus: profile.depositRefundedAt ? 'REFUNDED' : 'NOT_REFUNDED',
-        refundedAmount: profile.depositRefundedAmount || null,
+        paymentMode: paidDepositInvoices.length > 0 ? paidDepositInvoices[0]?.paymentMode : null,
+        collectedAmount,
+        deductionAmount: profile.depositDeductionAmount || 0,
+        refundedAmount: profile.depositRefundedAmount || 0,
+        refundStatus: profile.securityDepositStatus === 'REFUNDED' 
+          ? 'REFUNDED' 
+          : (profile.securityDepositStatus === 'PARTIALLY_REFUNDED' ? 'PARTIALLY_REFUNDED' : 'NOT_REFUNDED'),
         refundedAt: profile.depositRefundedAt || null,
         refundMode: profile.depositRefundMode || null,
+        refundNotes: profile.depositRefundNotes || null,
         tenantStatus: profile.status === 'PAST' ? 'PAST' : (profile.status === 'NOTICE' ? 'NOTICE' : 'ACTIVE'), // Normalize active/incomplete stays
         invoiceId: (depositInvoice && depositInvoice.status !== 'PAID') ? depositInvoice.id : null,
         invoiceDueDate: depositInvoice?.dueDate || null,

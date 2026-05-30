@@ -157,8 +157,10 @@ model PGTenantProfile {
   securityDepositStatus String         @default("PENDING")
   depositCollectedAt    DateTime?
   depositRefundedAmount Float?
+  depositDeductionAmount Float?         @default(0)
   depositRefundedAt     DateTime?
   depositRefundMode     String?
+  depositRefundNotes    String?
   moveInDate           DateTime       @default(now())
   moveOutDate          DateTime?
   
