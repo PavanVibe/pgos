@@ -32,6 +32,12 @@ async function main() {
     });
   }
 
+  // Ensure bed A is unoccupied
+  await prisma.pGTenantProfile.updateMany({
+    where: { bedId: bedA.id, status: { in: [TenantStatus.ACTIVE, TenantStatus.INCOMPLETE, TenantStatus.NOTICE] } },
+    data: { status: TenantStatus.PAST, bedId: null }
+  });
+
   // 1. Create a historical/past stay for Sriyu
   console.log("Creating historical PAST stay for Sriyu...");
   const oldProfile = await OnboardResidentWorkflow.execute(

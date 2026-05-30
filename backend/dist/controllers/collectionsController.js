@@ -225,9 +225,9 @@ const getDepositLedger = async (req, res) => {
             tenantProfilesMap.set(tenantId, list);
         }
         const consolidatedProfiles = Array.from(tenantProfilesMap.values()).map((tenantProfiles) => {
-            // Find if there is an active/notice stay record
-            const activeProfile = tenantProfiles.find((p) => p.status === 'ACTIVE' || p.status === 'NOTICE');
-            // If an active/notice stay exists, use it. Otherwise use the most recent stay (first in array since we ordered by moveInDate desc)
+            // Find if there is an active/notice/incomplete stay record (any stay that is not PAST)
+            const activeProfile = tenantProfiles.find((p) => p.status !== 'PAST');
+            // If an active stay exists, use it. Otherwise use the most recent stay (first in array since we ordered by moveInDate desc)
             return activeProfile || tenantProfiles[0];
         });
         const ledger = consolidatedProfiles.map((profile) => {
@@ -246,7 +246,7 @@ const getDepositLedger = async (req, res) => {
                 refundedAmount: profile.depositRefundedAmount || null,
                 refundedAt: profile.depositRefundedAt || null,
                 refundMode: profile.depositRefundMode || null,
-                tenantStatus: profile.status, // ACTIVE / PAST / NOTICE
+                tenantStatus: profile.status === 'PAST' ? 'PAST' : (profile.status === 'NOTICE' ? 'NOTICE' : 'ACTIVE'), // Normalize active/incomplete stays
                 invoiceId: (depositInvoice && depositInvoice.status !== 'PAID') ? depositInvoice.id : null,
                 invoiceDueDate: depositInvoice?.dueDate || null,
                 pendingAmount: (depositInvoice && depositInvoice.status !== 'PAID') ? depositInvoice.amount : 0
