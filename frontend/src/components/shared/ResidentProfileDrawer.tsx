@@ -16,6 +16,17 @@ export default function ResidentProfileDrawer() {
   const { isOpen, selectedProfileId, closeProfile } = useResidentProfileStore();
   const [fullscreenImage, setFullscreenImage] = useState<string | null>(null);
 
+  const friendlyStatus = (status: string) => {
+    const map: Record<string, string> = {
+      'PENDING': 'Pending Collection',
+      'PARTIALLY_RECOVERED': 'Partially Collected',
+      'FULLY_RECOVERED': 'Collected',
+      'WAIVED': 'Waived',
+      'DISPUTED': 'Disputed',
+    };
+    return map[status] || status;
+  };
+
   // 1. Drawer mount diagnostic log
   useEffect(() => {
     console.log("[DIAGNOSTIC] ResidentProfileDrawer component mounted.");
@@ -113,12 +124,24 @@ export default function ResidentProfileDrawer() {
 
   const totalPayments = totalRentPaid + collectedDeposit;
 
-  const outstandingTotal = invoices
-    .filter((inv: any) => inv.status !== 'PAID')
-    .reduce((sum: number, inv: any) => sum + inv.amount, 0);
-
   // Move-out Settlement Breakdown
   const damageRecoveries = profile?.damageRecoveries || [];
+
+  const outstandingDeposit = invoices
+    .filter((inv: any) => inv.type === 'SECURITY_DEPOSIT' && inv.status !== 'PAID')
+    .reduce((sum: number, inv: any) => sum + inv.amount, 0);
+
+  const outstandingRecoveries = damageRecoveries
+    .filter((rec: any) => rec.status !== 'FULLY_RECOVERED' && rec.status !== 'WAIVED')
+    .reduce((sum: number, rec: any) => sum + (rec.outstandingAmount ?? rec.amount ?? 0), 0);
+
+  const pendingRecoveriesCount = damageRecoveries
+    .filter((rec: any) => rec.status !== 'FULLY_RECOVERED' && rec.status !== 'WAIVED')
+    .length;
+
+  const rentDue = outstandingRent;
+  const totalDue = rentDue + outstandingRecoveries + outstandingDeposit;
+
   
   // 1. Damage Recoveries mapped to DEPOSIT method and marked as RECOVERED/deducted from deposit
   const depositRecoveriesAmount = damageRecoveries
@@ -281,6 +304,18 @@ export default function ResidentProfileDrawer() {
                               year: 'numeric'
                             })
                           : 'Active Stayer'}
+                      </span>
+                    </div>
+                    <div className="pt-3 border-t border-zinc-900">
+                      <span className="text-[9px] text-zinc-500 block uppercase tracking-wider font-bold">Damage Charges</span>
+                      <span className={`font-extrabold text-sm block mt-0.5 ${outstandingRecoveries > 0 ? 'text-amber-400' : 'text-zinc-300'}`}>
+                        ₹{outstandingRecoveries.toLocaleString('en-IN')}
+                      </span>
+                    </div>
+                    <div className="pt-3 border-t border-zinc-900">
+                      <span className="text-[9px] text-zinc-500 block uppercase tracking-wider font-bold">Money Owed</span>
+                      <span className={`font-extrabold text-sm block mt-0.5 ${pendingRecoveriesCount > 0 ? 'text-amber-400' : 'text-zinc-300'}`}>
+                        {pendingRecoveriesCount} Pending
                       </span>
                     </div>
                   </div>
@@ -589,7 +624,7 @@ export default function ResidentProfileDrawer() {
                                 rec.status === 'WAIVED' ? 'text-zinc-500' : 
                                 'text-amber-400'}`}
                             >
-                              {rec.status.replace('_', ' ')}
+                              {friendlyStatus(rec.status)}
                             </span>
                           </div>
                           {rec.createdAt && (
@@ -745,25 +780,54 @@ export default function ResidentProfileDrawer() {
                     Financial stay ledger
                   </h5>
                   <div className="space-y-3">
-                    {/* 3 Summary Cards */}
-                    <div className="grid grid-cols-3 gap-2.5 bg-zinc-950 p-4 border border-zinc-900 rounded-xl text-xs font-semibold">
+                    {/* 4 Summary Cards */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-zinc-950 p-4 border border-zinc-900 rounded-xl text-xs font-semibold">
                       <div className="space-y-0.5">
-                        <span className="text-[8px] text-zinc-500 block uppercase font-bold tracking-wider">Total Rent Paid</span>
-                        <span className="text-emerald-400 text-sm font-black">₹{totalRentPaid.toLocaleString('en-IN')}</span>
-                      </div>
-                      <div className="space-y-0.5 border-l border-zinc-900 pl-2.5">
-                        <span className="text-[8px] text-zinc-500 block uppercase font-bold tracking-wider">Outstanding Rent</span>
-                        <span className={`text-sm font-black ${outstandingRent > 0 ? 'text-red-400 animate-pulse' : 'text-zinc-400'}`}>
-                          ₹{outstandingRent.toLocaleString('en-IN')}
+                        <span className="text-[8px] text-zinc-500 block uppercase font-bold tracking-wider">Rent Due</span>
+                        <span className={`text-sm font-black ${rentDue > 0 ? 'text-red-400' : 'text-zinc-400'}`}>
+                          ₹{rentDue.toLocaleString('en-IN')}
                         </span>
                       </div>
                       <div className="space-y-0.5 border-l border-zinc-900 pl-2.5">
-                        <span className="text-[8px] text-zinc-500 block uppercase font-bold tracking-wider">Total Outstanding</span>
-                        <span className={`text-sm font-black ${outstandingTotal > 0 ? 'text-red-400' : 'text-zinc-400'}`}>
-                          ₹{outstandingTotal.toLocaleString('en-IN')}
+                        <span className="text-[8px] text-zinc-500 block uppercase font-bold tracking-wider">Damage Charges</span>
+                        <span className={`text-sm font-black ${outstandingRecoveries > 0 ? 'text-amber-400' : 'text-zinc-400'}`}>
+                          ₹{outstandingRecoveries.toLocaleString('en-IN')}
+                        </span>
+                      </div>
+                      <div className="space-y-0.5 border-l border-zinc-900 pl-2.5">
+                        <span className="text-[8px] text-zinc-500 block uppercase font-bold tracking-wider">Deposit Due</span>
+                        <span className={`text-sm font-black ${outstandingDeposit > 0 ? 'text-blue-400' : 'text-zinc-400'}`}>
+                          ₹{outstandingDeposit.toLocaleString('en-IN')}
+                        </span>
+                      </div>
+                      <div className="space-y-0.5 border-l border-zinc-900 pl-2.5">
+                        <span className="text-[8px] text-zinc-400 block uppercase font-bold tracking-wider">Total Due</span>
+                        <span className={`text-sm font-black ${totalDue > 0 ? 'text-red-400 animate-pulse' : 'text-zinc-400'}`}>
+                          ₹{totalDue.toLocaleString('en-IN')}
                         </span>
                       </div>
                     </div>
+
+                    {/* Money Owed Breakdown */}
+                    {totalDue > 0 && (
+                      <div className="bg-zinc-950/40 p-3.5 border border-zinc-900 rounded-xl space-y-2 text-xs">
+                        <p className="text-[10px] text-zinc-500 uppercase font-black tracking-wider">Money Owed Breakdown</p>
+                        <div className="space-y-1.5 font-bold uppercase tracking-wide text-[10px] text-zinc-400">
+                          <div className="flex justify-between items-center">
+                            <span>Rent</span>
+                            <span className={rentDue > 0 ? 'text-red-400' : 'text-zinc-500'}>₹{rentDue.toLocaleString('en-IN')}</span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span>Damage Recovery</span>
+                            <span className={outstandingRecoveries > 0 ? 'text-amber-400' : 'text-zinc-500'}>₹{outstandingRecoveries.toLocaleString('en-IN')}</span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span>Deposit</span>
+                            <span className={outstandingDeposit > 0 ? 'text-blue-400' : 'text-zinc-500'}>₹{outstandingDeposit.toLocaleString('en-IN')}</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
 
                     {/* Detailed Transaction History Ledger */}
                     <div className="space-y-2 max-h-64 overflow-y-auto scrollbar-none">
@@ -838,22 +902,53 @@ export default function ResidentProfileDrawer() {
                       <div className="p-4 text-center text-[10px] text-zinc-500 font-bold uppercase tracking-wider">No complaint tickets logged.</div>
                     ) : (
                       complaints.map((c: any) => (
-                        <div key={c.id} className="p-3 flex justify-between items-center text-xs font-semibold">
-                          <div className="space-y-0.5 w-2/3">
-                            <span className="text-zinc-200 block truncate">{c.description}</span>
-                            <span className="text-[10px] text-zinc-500 block uppercase font-bold">
-                              Category: {c.category}
-                            </span>
+                        <div key={c.id} className="p-3 flex flex-col gap-2 text-xs font-semibold">
+                          <div className="flex justify-between items-center">
+                            <div className="space-y-0.5 w-2/3">
+                              <span className="text-zinc-200 block truncate">{c.description}</span>
+                              <span className="text-[10px] text-zinc-500 block uppercase font-bold">
+                                Category: {c.category}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className={`text-[9px] font-black uppercase tracking-wider border px-2 py-0.5 rounded
+                                ${c.status === 'RESOLVED' ? 'text-emerald-400 border-emerald-500/20 bg-emerald-500/5' : 
+                                  c.status === 'ESCALATED' ? 'text-red-400 border-red-500/20 bg-red-500/5' : 
+                                  'text-amber-400 border-amber-500/20 bg-amber-500/5'}`}
+                              >
+                                {c.status}
+                              </span>
+                            </div>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <span className={`text-[9px] font-black uppercase tracking-wider border px-2 py-0.5 rounded
-                              ${c.status === 'RESOLVED' ? 'text-emerald-400 border-emerald-500/20 bg-emerald-500/5' : 
-                                c.status === 'ESCALATED' ? 'text-red-400 border-red-500/20 bg-red-500/5' : 
-                                'text-amber-400 border-amber-500/20 bg-amber-500/5'}`}
-                            >
-                              {c.status}
-                            </span>
-                          </div>
+                          {(() => {
+                            const cRecovery = damageRecoveries.find((rec: any) => rec.complaintId === c.id);
+                            if (!cRecovery) return null;
+                            return (
+                              <div className="mt-1 bg-zinc-950 p-2.5 rounded-lg border border-zinc-900 flex justify-between items-center text-[10px]">
+                                <div className="space-y-1">
+                                  <div className="flex items-center gap-1.5 text-zinc-400 uppercase font-black tracking-wider">
+                                    <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+                                    Recovery Created
+                                  </div>
+                                  <div className="text-zinc-350 font-bold mt-0.5">
+                                    Amount: <span className="text-zinc-100 font-extrabold">₹{cRecovery.amount.toLocaleString('en-IN')}</span>
+                                  </div>
+                                  <div className="text-zinc-400 font-bold">
+                                    Status: <span className="text-amber-400 font-extrabold">{friendlyStatus(cRecovery.status)}</span>
+                                  </div>
+                                </div>
+                                <button
+                                  onClick={() => {
+                                    window.location.href = `/recoveries?search=${encodeURIComponent(profile.globalTenant?.name || '')}`;
+                                    closeProfile();
+                                  }}
+                                  className="text-[9px] text-primary hover:underline font-black uppercase tracking-wider cursor-pointer select-none"
+                                >
+                                  [View Recovery]
+                                </button>
+                              </div>
+                            );
+                          })()}
                         </div>
                       ))
                     )}

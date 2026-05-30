@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useOrganizationStore } from '@/store/useOrganizationStore';
 import { fetchApi } from '@/lib/api';
@@ -63,8 +64,11 @@ function RecoveriesLedgerContent() {
   const { activePgId, availablePgs, setActivePgId } = useOrganizationStore();
   const queryClient = useQueryClient();
 
+  const searchParams = useSearchParams();
+  const initialSearch = searchParams.get('search') || '';
+
   // Filters State
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState(initialSearch);
   const [statusFilter, setStatusFilter] = useState<'all' | 'PENDING' | 'ACCEPTED' | 'DISPUTED' | 'PARTIALLY_RECOVERED' | 'FULLY_RECOVERED' | 'WAIVED'>('all');
   const [methodFilter, setMethodFilter] = useState<'all' | 'DEPOSIT' | 'CASH' | 'UPI' | 'WAIVED'>('all');
 
@@ -276,38 +280,38 @@ function RecoveriesLedgerContent() {
       case 'FULLY_RECOVERED':
         return (
           <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-green-500/10 text-green-400 border border-green-500/20">
-            <CheckCircle2 className="h-3 w-3" /> FULLY RECOVERED
+            <CheckCircle2 className="h-3 w-3" /> Collected
           </span>
         );
       case 'PARTIALLY_RECOVERED':
         return (
           <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20">
-            <Clock className="h-3 w-3" /> PARTIAL
+            <Clock className="h-3 w-3" /> Partially Collected
           </span>
         );
       case 'WAIVED':
         return (
           <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-zinc-900 text-zinc-400 border border-zinc-800">
-            <Ban className="h-3 w-3" /> WAIVED
+            <Ban className="h-3 w-3" /> Waived
           </span>
         );
       case 'DISPUTED':
         return (
           <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-red-500/10 text-red-400 border border-red-500/20">
-            <MessageSquareOff className="h-3 w-3" /> DISPUTED
+            <MessageSquareOff className="h-3 w-3" /> Disputed
           </span>
         );
       case 'ACCEPTED':
         return (
           <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20">
-            <ShieldCheck className="h-3 w-3" /> ACCEPTED
+            <ShieldCheck className="h-3 w-3" /> Approved
           </span>
         );
       case 'PENDING':
       default:
         return (
           <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
-            <Clock className="h-3 w-3" /> PENDING
+            <Clock className="h-3 w-3" /> Pending Collection
           </span>
         );
     }

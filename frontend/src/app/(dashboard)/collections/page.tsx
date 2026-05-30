@@ -70,6 +70,15 @@ export default function CollectionsHistoryPage() {
 
   const historyData: HistoricalMonth[] = historyResponse?.data || [];
 
+  // 3. Fetch Dashboard Summary
+  const { data: summaryResponse } = useQuery({
+    queryKey: ['dashboard-summary', activePgId],
+    queryFn: () => fetchApi(`/pgs/${activePgId}/dashboard/summary`),
+    enabled: !!activePgId,
+  });
+
+  const summaryData = summaryResponse?.data;
+
   // Extract unique years for the filter dropdown
   const uniqueYears = Array.from(new Set(historyData.map((d) => String(d.year))));
 
@@ -106,21 +115,21 @@ export default function CollectionsHistoryPage() {
     switch (status) {
       case 'PAID':
         return (
-          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-            <CheckCircle2 className="h-3 w-3" /> PAID
+          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+            <CheckCircle2 className="h-3 w-3" /> Collected
           </span>
         );
       case 'PAST_DUE':
         return (
-          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-500/10 text-red-400 border border-red-500/20 animate-pulse">
-            <AlertCircle className="h-3 w-3" /> OVERDUE
+          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-red-500/10 text-red-400 border border-red-500/20 animate-pulse">
+            <AlertCircle className="h-3 w-3" /> Overdue
           </span>
         );
       case 'PENDING':
       default:
         return (
-          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
-            <AlertCircle className="h-3 w-3" /> PENDING
+          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
+            <AlertCircle className="h-3 w-3" /> Pending Collection
           </span>
         );
     }
@@ -180,6 +189,37 @@ export default function CollectionsHistoryPage() {
 
       {/* 2. Page Content Grid */}
       <div className="space-y-6 print:hidden">
+        {/* Top Summary Bar */}
+        {summaryData && (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="bg-zinc-950/40 p-4 border border-zinc-900 rounded-2xl space-y-1 hover:border-zinc-800 transition-all select-none">
+              <span className="text-[9px] text-zinc-500 uppercase tracking-widest block font-black">Rent Due</span>
+              <span className="text-xl font-black text-red-400">
+                ₹{(summaryData.pendingRent || 0).toLocaleString('en-IN')}
+              </span>
+            </div>
+            <div className="bg-zinc-950/40 p-4 border border-zinc-900 rounded-2xl space-y-1 hover:border-zinc-800 transition-all select-none">
+              <span className="text-[9px] text-zinc-500 uppercase tracking-widest block font-black">Damage Charges</span>
+              <span className="text-xl font-black text-amber-400">
+                ₹{(summaryData.totalPendingRecoveryAmount || 0).toLocaleString('en-IN')}
+              </span>
+            </div>
+            <div className="bg-zinc-950/40 p-4 border border-zinc-900 rounded-2xl space-y-1 hover:border-zinc-800 transition-all select-none">
+              <span className="text-[9px] text-zinc-500 uppercase tracking-widest block font-black">Deposit Due</span>
+              <span className="text-xl font-black text-blue-400">
+                ₹{(summaryData.pendingDeposits || 0).toLocaleString('en-IN')}
+              </span>
+            </div>
+            <div className="bg-zinc-950/40 p-4 border border-zinc-900/80 rounded-2xl space-y-1 hover:border-zinc-700 transition-all select-none bg-gradient-to-r from-zinc-950/50 to-zinc-900/20 relative overflow-hidden group">
+              <div className="absolute top-0 right-0 h-full w-1/3 bg-primary/5 blur-3xl rounded-full" />
+              <span className="text-[9px] text-zinc-400 uppercase tracking-widest block font-black">Total Outstanding</span>
+              <span className="text-xl font-black text-primary animate-pulse">
+                ₹{(summaryData.totalOutstanding || 0).toLocaleString('en-IN')}
+              </span>
+            </div>
+          </div>
+        )}
+
         {/* Filters and Search Bar */}
         <div className="flex flex-col sm:flex-row gap-3 bg-zinc-950/20 border border-zinc-900/60 p-4 rounded-2xl">
           <div className="relative flex-1">
@@ -200,8 +240,9 @@ export default function CollectionsHistoryPage() {
               className="bg-zinc-950 border border-zinc-900 px-3.5 py-2 rounded-xl text-sm font-semibold focus:outline-none text-primary cursor-pointer"
             >
               <option value="all">All Types</option>
-              <option value="rent">Rent</option>
-              <option value="security_deposit">Security Deposit</option>
+              <option value="rent">Rent Due</option>
+              <option value="security_deposit">Deposit Due</option>
+              <option value="damage_recovery">Damage Charges</option>
             </select>
 
             <select
@@ -410,10 +451,12 @@ export default function CollectionsHistoryPage() {
                                 <span>{row.residentName}</span>
                                 <span className={`block text-[9px] uppercase tracking-wider font-extrabold mt-0.5 w-fit rounded px-1.5 py-0.5 border
                                   ${row.type === 'SECURITY_DEPOSIT' 
-                                    ? 'text-blue-450 border-blue-500/20 bg-blue-500/5' 
+                                    ? 'text-blue-400 border-blue-500/20 bg-blue-500/5' 
+                                    : row.type === 'DAMAGE_RECOVERY'
+                                    ? 'text-amber-400 border-amber-500/20 bg-amber-500/5'
                                     : 'text-zinc-400 border-zinc-800 bg-zinc-900/20'}`}
                                 >
-                                  {row.type === 'SECURITY_DEPOSIT' ? 'Deposit' : 'Rent'}
+                                  {row.type === 'SECURITY_DEPOSIT' ? 'Deposit Due' : row.type === 'DAMAGE_RECOVERY' ? 'Damage Charges' : 'Rent Due'}
                                 </span>
                               </div>
                             </td>

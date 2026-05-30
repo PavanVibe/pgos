@@ -26,7 +26,9 @@ export const getPGDashboardSummary = async (pgId: string, orgId: string) => {
     collectedDepositsSum,
     pendingDepositsSum,
     refundLiabilitySum,
-    pendingRefundResidentsCount
+    pendingRefundResidentsCount,
+    pendingRecoveriesCount,
+    totalPendingRecoveryAmountData
   ] = await Promise.all([
     // Total Beds (Soft delete filter applies automatically via Prisma Extension)
     prisma.bed.count({
@@ -135,6 +137,23 @@ export const getPGDashboardSummary = async (pgId: string, orgId: string) => {
         securityDepositStatus: { in: ['COLLECTED', 'PARTIALLY_REFUNDED'] },
         isActive: true
       }
+    }),
+    // Pending Damage Recoveries Count (unpaid/not waived)
+    prisma.damageRecovery.count({
+      where: {
+        pgId,
+        status: { in: ['PENDING', 'PARTIALLY_RECOVERED', 'DISPUTED'] }
+      }
+    }),
+    // Total Pending Damage Recovery Amount
+    prisma.damageRecovery.aggregate({
+      where: {
+        pgId,
+        status: { in: ['PENDING', 'PARTIALLY_RECOVERED', 'DISPUTED'] }
+      },
+      _sum: {
+        outstandingAmount: true
+      }
     })
   ]);
 
@@ -203,11 +222,15 @@ export const getPGDashboardSummary = async (pgId: string, orgId: string) => {
   });
   const collectedLastMonth = lastMonthPaidInvoices._sum.amount || 0;
 
+  const rentDueVal = pendingInvoices._sum.amount || 0;
+  const damageChargesVal = totalPendingRecoveryAmountData._sum.outstandingAmount || 0;
+  const depositDueVal = pendingDepositsSum._sum.amount || 0;
+
   return {
     totalBeds,
     occupiedBeds,
     vacantBeds: totalBeds - occupiedBeds,
-    pendingRent: pendingInvoices._sum.amount || 0,
+    pendingRent: rentDueVal,
     unpaidInvoicesCount,
     overdueRent: overdueInvoicesSum._sum.amount || 0,
     overdueCount: overdueInvoicesCount,
@@ -220,9 +243,12 @@ export const getPGDashboardSummary = async (pgId: string, orgId: string) => {
     payingResidentsCount,
     collectedLastMonth,
     collectedDeposits: collectedDepositsSum._sum.amount || 0,
-    pendingDeposits: pendingDepositsSum._sum.amount || 0,
+    pendingDeposits: depositDueVal,
     refundedDeposits: refundLiabilitySum._sum.depositRefundedAmount || 0,
     refundLiability: Math.max(0, (collectedDepositsSum._sum.amount || 0) - (refundLiabilitySum._sum.depositRefundedAmount || 0) - (refundLiabilitySum._sum.depositDeductionAmount || 0)),
-    pendingRefundResidents: pendingRefundResidentsCount
+    pendingRefundResidents: pendingRefundResidentsCount,
+    pendingRecoveriesCount,
+    totalPendingRecoveryAmount: damageChargesVal,
+    totalOutstanding: rentDueVal + damageChargesVal + depositDueVal
   };
 };

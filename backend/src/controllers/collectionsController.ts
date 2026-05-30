@@ -138,42 +138,77 @@ export const getMonthlyCollectionLedger = async (req: Request, res: Response) =>
     const endOfMonth = new Date(year, monthIndex + 1, 0, 23, 59, 59, 999);
 
     const { type } = req.query;
-    const invoiceWhere: any = {
-      tenantProfile: { pgId },
-      dueDate: {
-        gte: startOfMonth,
-        lte: endOfMonth,
-      },
-      isActive: true,
-    };
-    if (type === 'RENT' || type === 'SECURITY_DEPOSIT') {
-      invoiceWhere.type = type as string;
-    }
+    const typeStr = (type as string || '').toUpperCase();
 
-    // Fetch all invoices due in this calendar month
-    const invoices = await prisma.rentInvoice.findMany({
-      where: invoiceWhere,
-      include: {
-        tenantProfile: {
-          include: {
-            globalTenant: {
-              select: { name: true },
-            },
-            room: {
-              select: { number: true },
-            },
-            bed: {
-              select: { bedNumber: true },
+    let invoices: any[] = [];
+    if (typeStr === 'RENT' || typeStr === 'SECURITY_DEPOSIT' || !typeStr || typeStr === 'ALL') {
+      const invoiceWhere: any = {
+        tenantProfile: { pgId },
+        dueDate: {
+          gte: startOfMonth,
+          lte: endOfMonth,
+        },
+        isActive: true,
+      };
+      if (typeStr === 'RENT' || typeStr === 'SECURITY_DEPOSIT') {
+        invoiceWhere.type = typeStr;
+      }
+
+      invoices = await prisma.rentInvoice.findMany({
+        where: invoiceWhere,
+        include: {
+          tenantProfile: {
+            include: {
+              globalTenant: {
+                select: { name: true },
+              },
+              room: {
+                select: { number: true },
+              },
+              bed: {
+                select: { bedNumber: true },
+              },
             },
           },
         },
-      },
-      orderBy: {
-        dueDate: 'desc',
-      },
-    });
+        orderBy: {
+          dueDate: 'desc',
+        },
+      });
+    }
 
-    const ledger = invoices.map((inv) => {
+    let recoveries: any[] = [];
+    if (typeStr === 'DAMAGE_RECOVERY' || !typeStr || typeStr === 'ALL') {
+      recoveries = await prisma.damageRecovery.findMany({
+        where: {
+          tenantProfile: { pgId },
+          createdAt: {
+            gte: startOfMonth,
+            lte: endOfMonth,
+          },
+        },
+        include: {
+          tenantProfile: {
+            include: {
+              globalTenant: {
+                select: { name: true },
+              },
+              room: {
+                select: { number: true },
+              },
+              bed: {
+                select: { bedNumber: true },
+              },
+            },
+          },
+        },
+        orderBy: {
+          createdAt: 'desc',
+        },
+      });
+    }
+
+    const invoiceEntries = invoices.map((inv) => {
       const profile = inv.tenantProfile;
       return {
         id: inv.id,
@@ -189,6 +224,28 @@ export const getMonthlyCollectionLedger = async (req: Request, res: Response) =>
         status: inv.status,
         type: inv.type,
       };
+    });
+
+    const recoveryEntries = recoveries.map((rec) => {
+      const profile = rec.tenantProfile;
+      return {
+        id: rec.id,
+        residentName: profile.globalTenant.name || 'Unknown',
+        roomNumber: profile.room?.number || profile.historicalRoomNumber || '-',
+        bedNumber: profile.bed?.bedNumber || profile.historicalBedNumber || '-',
+        amountPaid: rec.recoveredAmount || 0,
+        dueAmount: rec.outstandingAmount || 0,
+        dueDate: rec.createdAt,
+        paymentDate: rec.recoveredAt || null,
+        paymentMode: rec.recoveryMethod || null,
+        referenceId: rec.referenceNumber || rec.id,
+        status: rec.status === 'FULLY_RECOVERED' ? 'PAID' : rec.status === 'PENDING' ? 'PENDING' : 'PAST_DUE',
+        type: 'DAMAGE_RECOVERY',
+      };
+    });
+
+    const ledger = [...invoiceEntries, ...recoveryEntries].sort((a, b) => {
+      return new Date(b.dueDate).getTime() - new Date(a.dueDate).getTime();
     });
 
     res.status(200).json({ status: 'success', data: ledger });

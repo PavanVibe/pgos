@@ -54,6 +54,19 @@ export default function ResolveComplaintSheet() {
   const [resolvedImageUrl, setResolvedImageUrl] = useState<string>('');
   const [resolutionNotes, setResolutionNotes] = useState<string>('');
 
+  // Success Confirmation state
+  const [resolvedData, setResolvedData] = useState<{
+    success: boolean;
+    amount: number;
+    residentName: string;
+    responsibility: 'SPECIFIC_RESIDENT' | 'ENTIRE_ROOM' | 'OWNER';
+  } | null>(null);
+
+  const handleClose = () => {
+    setResolvedData(null);
+    closeResolveComplaint();
+  };
+
   // Default dropdown and form values when complaint context is available
   useEffect(() => {
     if (complaint && isResolveOpen) {
@@ -65,6 +78,7 @@ export default function ResolveComplaintSheet() {
       setBillUrl('');
       setResolvedImageUrl('');
       setResolutionNotes('');
+      setResolvedData(null);
     }
   }, [complaint, isResolveOpen]);
 
@@ -111,7 +125,20 @@ export default function ResolveComplaintSheet() {
       });
     },
     onSuccess: () => {
-      toast.success('Complaint resolved and recoveries processed successfully.');
+      let residentName = 'Resident';
+      if (responsibility === 'SPECIFIC_RESIDENT') {
+        const resObj = residentsList.find(r => r.id === assignedTenantId);
+        residentName = resObj ? resObj.residentName : 'Resident';
+      }
+
+      setResolvedData({
+        success: true,
+        amount: totalCost,
+        residentName,
+        responsibility
+      });
+
+      toast.success('Complaint resolved successfully.');
       
       if (activePgId) {
         queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.summary(activePgId) });
@@ -121,8 +148,6 @@ export default function ResolveComplaintSheet() {
         queryClient.invalidateQueries({ queryKey: ['deposit-ledger', activePgId] });
         queryClient.invalidateQueries({ queryKey: ['recoveries-ledger', activePgId] });
       }
-
-      closeResolveComplaint();
     },
     onError: (error: any) => {
       toast.error(error.message || 'Failed to resolve complaint.');
@@ -160,7 +185,7 @@ export default function ResolveComplaintSheet() {
   const loading = resolveMutation.isPending;
 
   return (
-    <Sheet open={isResolveOpen} onOpenChange={(open) => !open && closeResolveComplaint()}>
+    <Sheet open={isResolveOpen} onOpenChange={(open) => !open && handleClose()}>
       <SheetContent side="bottom" className="sm:max-w-md mx-auto rounded-t-2xl bg-black text-white border-zinc-800 flex flex-col p-6 max-h-[95vh] overflow-y-auto">
         <SheetHeader className="text-left space-y-1.5 pb-4 border-b border-zinc-900">
           <SheetTitle className="text-xl font-extrabold flex items-center gap-2">
@@ -174,242 +199,286 @@ export default function ResolveComplaintSheet() {
           </SheetDescription>
         </SheetHeader>
 
-        <div className="flex-1 py-4 space-y-5">
-          {/* Responsibility Assignment selection */}
-          <div className="space-y-1.5">
-            <label className="text-[10px] font-extrabold text-zinc-500 uppercase tracking-wider block">Assigned Responsibility</label>
-            <div className="grid grid-cols-3 gap-2.5">
-              {[
-                { id: 'SPECIFIC_RESIDENT', label: 'Specific Resident' },
-                { id: 'ENTIRE_ROOM', label: 'Entire Room' },
-                { id: 'OWNER', label: 'Owner Expense' }
-              ].map((opt) => {
-                const isSelected = responsibility === opt.id;
-                return (
-                  <button
-                    key={opt.id}
-                    onClick={() => setResponsibility(opt.id as any)}
-                    disabled={loading}
-                    className={`py-2 rounded-lg border text-[10px] font-bold uppercase transition-all duration-200 cursor-pointer select-none text-center
-                      ${isSelected 
-                        ? 'bg-green-500/10 border-green-500/30 text-green-400' 
-                        : 'bg-zinc-950 border-zinc-900 text-zinc-400 hover:border-zinc-800'}`}
-                  >
-                    {opt.label}
-                  </button>
-                );
-              })}
+        {resolvedData?.success ? (
+          <div className="flex-1 py-8 flex flex-col items-center justify-center text-center space-y-6 animate-in fade-in zoom-in duration-300">
+            <div className="h-16 w-16 bg-green-500/10 border border-green-500/20 text-green-400 rounded-full flex items-center justify-center animate-bounce">
+              <CheckCircle className="h-8 w-8" />
             </div>
-          </div>
-
-          {/* Conditional Dropdown for Specific Resident */}
-          {responsibility === 'SPECIFIC_RESIDENT' && (
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-extrabold text-zinc-500 uppercase tracking-wider block">Select Target Resident</label>
-              <div className="relative">
-                <select
-                  value={assignedTenantId}
-                  onChange={(e) => setAssignedTenantId(e.target.value)}
-                  disabled={loading}
-                  className="w-full bg-zinc-950 border border-zinc-900 focus:border-zinc-800 text-xs font-semibold h-10 px-3 rounded-xl focus:outline-none appearance-none"
-                >
-                  <option value="">-- Choose Resident --</option>
-                  {residentsList
-                    .filter(res => res.tenantStatus !== 'PAST' || res.status === 'COLLECTED')
-                    .map((res: any) => (
-                      <option key={res.id} value={res.id} className="bg-zinc-950 text-white">
-                        {res.residentName} (Room {res.roomNumber}, Bed {res.bedNumber})
-                      </option>
-                    ))}
-                </select>
-                <ChevronDown className="h-4 w-4 text-zinc-500 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-              </div>
+            <div className="space-y-1">
+              <h3 className="text-xl font-black text-zinc-100">Complaint Resolved Successfully</h3>
+              <p className="text-[10px] text-zinc-500 font-black uppercase tracking-wider">
+                Outstanding Balance Updated
+              </p>
             </div>
-          )}
 
-          {/* Conditional Multi-item damage breakdown (Only visible for Resident / Room Damage) */}
-          {responsibility !== 'OWNER' && (
-            <div className="space-y-3">
-              <div className="flex justify-between items-center">
-                <label className="text-[10px] font-extrabold text-zinc-500 uppercase tracking-wider block">Itemized Damage Breakdown</label>
-                <button
-                  type="button"
-                  onClick={handleAddItem}
-                  disabled={loading}
-                  className="inline-flex items-center gap-0.5 text-[10px] font-black uppercase text-green-400 hover:text-green-300"
-                >
-                  <Plus className="h-3.5 w-3.5" /> Add Item
-                </button>
-              </div>
-
-              <div className="space-y-2.5 max-h-36 overflow-y-auto pr-1">
-                {deductionItems.map((item, index) => (
-                  <div key={index} className="flex gap-2 items-center bg-zinc-950 p-2.5 border border-zinc-900 rounded-xl relative animate-fadeIn">
-                    <div className="flex-1 space-y-2">
-                      <div className="grid grid-cols-2 gap-2">
-                        <Input
-                          placeholder="e.g. Broken Fan, Clean..."
-                          value={item.title}
-                          onChange={(e) => handleUpdateItem(index, 'title', e.target.value)}
-                          disabled={loading}
-                          className="bg-black border-zinc-900 text-xs h-8 placeholder-zinc-800"
-                        />
-                        <div className="relative">
-                          <Input
-                            type="number"
-                            placeholder="Amount (₹)"
-                            value={item.amount || ''}
-                            onChange={(e) => handleUpdateItem(index, 'amount', e.target.value)}
-                            disabled={loading}
-                            className="pl-6 bg-black border-zinc-900 text-xs h-8 placeholder-zinc-800"
-                          />
-                          <IndianRupee className="h-3 w-3 text-zinc-650 absolute left-2 top-1/2 -translate-y-1/2" />
-                        </div>
-                      </div>
-                      <Input
-                        placeholder="Item detail notes..."
-                        value={item.notes}
-                        onChange={(e) => handleUpdateItem(index, 'notes', e.target.value)}
-                        disabled={loading}
-                        className="bg-black border-zinc-900 text-[10px] h-7 placeholder-zinc-800"
-                      />
-                    </div>
-                    {deductionItems.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveItem(index)}
-                        disabled={loading}
-                        className="p-1 text-red-500 hover:bg-zinc-900/60 rounded cursor-pointer select-none"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    )}
+            <div className="w-full bg-zinc-950 p-4 border border-zinc-900 rounded-xl space-y-3.5 text-xs text-left">
+              {resolvedData.responsibility === 'ENTIRE_ROOM' ? (
+                <p className="text-zinc-300 font-extrabold leading-relaxed text-center py-2 text-[13px]">
+                  ₹{resolvedData.amount.toLocaleString('en-IN')} recovery split among room occupants.
+                </p>
+              ) : (
+                <>
+                  <div className="flex justify-between items-center text-zinc-400">
+                    <span className="font-bold">Damage Charges Created</span>
+                    <span className="text-amber-400 font-black text-sm">₹{resolvedData.amount.toLocaleString('en-IN')}</span>
                   </div>
-                ))}
-              </div>
-
-              {/* Live Repair Cost total calculation */}
-              <div className="bg-zinc-950 border border-zinc-900/60 p-3 rounded-xl flex justify-between items-center text-xs font-semibold">
-                <span className="text-zinc-400">Total Resolution Cost</span>
-                <span className="text-sm font-black text-green-400">
-                  ₹{totalCost.toLocaleString('en-IN')}
-                </span>
-              </div>
-            </div>
-          )}
-
-          {/* Owner Expense repair cost override (Only visible if responsibility is Owner) */}
-          {responsibility === 'OWNER' && (
-            <div className="space-y-1.5 animate-fadeIn">
-              <label className="text-[10px] font-extrabold text-zinc-500 uppercase tracking-wider block">Total Maintenance Cost (₹)</label>
-              <div className="relative">
-                <Input
-                  type="number"
-                  value={amountInput}
-                  onChange={(e) => setAmountInput(e.target.value)}
-                  disabled={loading}
-                  placeholder="Enter total cost incurred..."
-                  className="pl-8 bg-zinc-950 border-zinc-900 focus:border-zinc-800 text-sm font-black h-10 rounded-xl"
-                />
-                <IndianRupee className="h-4 w-4 text-zinc-600 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                  <div className="flex justify-between items-center text-zinc-400">
+                    <span className="font-bold">Assigned To</span>
+                    <span className="text-zinc-200 font-black">
+                      {resolvedData.responsibility === 'SPECIFIC_RESIDENT' 
+                        ? resolvedData.residentName 
+                        : 'Owner Expense'}
+                    </span>
+                  </div>
+                </>
+              )}
+              <div className="flex justify-between items-center text-[9px] text-zinc-500 font-bold uppercase tracking-wider pt-2 border-t border-zinc-900">
+                <span>Status</span>
+                <span className="text-green-400 font-black">Money Owed Updated</span>
               </div>
             </div>
-          )}
 
-          {/* Recovery Method Selection */}
-          {responsibility !== 'OWNER' && (
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-extrabold text-zinc-500 uppercase tracking-wider block">Recovery Method</label>
-              <div className="grid grid-cols-3 gap-2.5">
-                {[
-                  { id: 'DEPOSIT', label: 'Deposit Deduct', icon: HelpCircle },
-                  { id: 'UPI', label: 'UPI Collect', icon: QrCode },
-                  { id: 'CASH', label: 'Cash Collect', icon: Banknote }
-                ].map((opt) => {
-                  const IconComp = opt.icon;
-                  const isSelected = recoveryMethod === opt.id;
-                  return (
-                    <button
-                      key={opt.id}
-                      onClick={() => setRecoveryMethod(opt.id as any)}
+            <div className="w-full flex flex-col gap-2 pt-4">
+              <Button
+                onClick={() => {
+                  const searchVal = resolvedData.responsibility === 'SPECIFIC_RESIDENT' ? resolvedData.residentName : '';
+                  window.location.href = `/recoveries?search=${encodeURIComponent(searchVal)}`;
+                  handleClose();
+                }}
+                className="w-full bg-primary hover:opacity-90 text-black font-extrabold text-xs uppercase tracking-widest h-11 rounded-xl shadow-lg select-none transition-all flex items-center justify-center gap-1.5"
+              >
+                {resolvedData.responsibility === 'ENTIRE_ROOM' ? 'View Recoveries' : 'View Recovery'}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={handleClose}
+                className="w-full border-zinc-900 hover:bg-zinc-900/40 text-zinc-400 hover:text-white font-bold text-xs uppercase tracking-wider h-10 rounded-xl"
+              >
+                Dismiss
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="flex-1 py-4 space-y-5">
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-extrabold text-zinc-500 uppercase tracking-wider block">Assigned Responsibility</label>
+                <div className="grid grid-cols-3 gap-2.5">
+                  {[
+                    { id: 'SPECIFIC_RESIDENT', label: 'Specific Resident' },
+                    { id: 'ENTIRE_ROOM', label: 'Entire Room' },
+                    { id: 'OWNER', label: 'Owner Expense' }
+                  ].map((opt) => {
+                    const isSelected = responsibility === opt.id;
+                    return (
+                      <button
+                        key={opt.id}
+                        onClick={() => setResponsibility(opt.id as any)}
+                        disabled={loading}
+                        className={`py-2 rounded-lg border text-[10px] font-bold uppercase transition-all duration-200 cursor-pointer select-none text-center
+                          ${isSelected 
+                            ? 'bg-green-500/10 border-green-500/30 text-green-400' 
+                            : 'bg-zinc-950 border-zinc-900 text-zinc-400 hover:border-zinc-800'}`}
+                      >
+                        {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {responsibility === 'SPECIFIC_RESIDENT' && (
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-extrabold text-zinc-500 uppercase tracking-wider block">Select Target Resident</label>
+                  <div className="relative">
+                    <select
+                      value={assignedTenantId}
+                      onChange={(e) => setAssignedTenantId(e.target.value)}
                       disabled={loading}
-                      className={`flex flex-col items-center justify-center py-2 rounded-xl border text-[10px] font-bold uppercase transition-all duration-200 cursor-pointer select-none
-                        ${isSelected 
-                          ? 'bg-purple-500/10 border-purple-500/30 text-purple-400' 
-                          : 'bg-zinc-950 border-zinc-900 text-zinc-400 hover:border-zinc-800 hover:text-zinc-200'}`}
+                      className="w-full bg-zinc-950 border border-zinc-900 focus:border-zinc-800 text-xs font-semibold h-10 px-3 rounded-xl focus:outline-none appearance-none"
                     >
-                      <IconComp className={`h-4 w-4 mb-1 ${isSelected ? 'text-purple-400 scale-105' : 'text-zinc-500'}`} />
-                      {opt.label}
+                      <option value="">-- Choose Resident --</option>
+                      {residentsList
+                        .filter(res => res.tenantStatus !== 'PAST' || res.status === 'COLLECTED')
+                        .map((res: any) => (
+                          <option key={res.id} value={res.id} className="bg-zinc-950 text-white">
+                            {res.residentName} (Room {res.roomNumber}, Bed {res.bedNumber})
+                          </option>
+                        ))}
+                    </select>
+                    <ChevronDown className="h-4 w-4 text-zinc-500 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  </div>
+                </div>
+              )}
+
+              {responsibility !== 'OWNER' && (
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center">
+                    <label className="text-[10px] font-extrabold text-zinc-500 uppercase tracking-wider block">Itemized Damage Breakdown</label>
+                    <button
+                      type="button"
+                      onClick={handleAddItem}
+                      disabled={loading}
+                      className="inline-flex items-center gap-0.5 text-[10px] font-black uppercase text-green-400 hover:text-green-300"
+                    >
+                      <Plus className="h-3.5 w-3.5" /> Add Item
                     </button>
-                  );
-                })}
+                  </div>
+
+                  <div className="space-y-2.5 max-h-36 overflow-y-auto pr-1">
+                    {deductionItems.map((item, index) => (
+                      <div key={index} className="flex gap-2 items-center bg-zinc-950 p-2.5 border border-zinc-900 rounded-xl relative animate-fadeIn">
+                        <div className="flex-1 space-y-2">
+                          <div className="grid grid-cols-2 gap-2">
+                            <Input
+                              placeholder="Fan Replacement..."
+                              value={item.title}
+                              onChange={(e) => handleUpdateItem(index, 'title', e.target.value)}
+                              disabled={loading}
+                              className="bg-zinc-950 border-zinc-900 focus:border-zinc-800 text-xs font-semibold h-9 rounded-lg"
+                            />
+                            <div className="relative">
+                              <Input
+                                type="number"
+                                placeholder="Cost..."
+                                value={item.amount || ''}
+                                onChange={(e) => handleUpdateItem(index, 'amount', e.target.value)}
+                                disabled={loading}
+                                className="pl-6 bg-zinc-950 border-zinc-900 focus:border-zinc-800 text-xs font-semibold h-9 rounded-lg"
+                              />
+                              <IndianRupee className="h-3 w-3 text-zinc-500 absolute left-2 top-1/2 -translate-y-1/2" />
+                            </div>
+                          </div>
+                          <Input
+                            placeholder="Item description or item notes (optional)..."
+                            value={item.notes}
+                            onChange={(e) => handleUpdateItem(index, 'notes', e.target.value)}
+                            disabled={loading}
+                            className="bg-zinc-950 border-zinc-900 focus:border-zinc-800 text-[10px] h-8 rounded-lg"
+                          />
+                        </div>
+                        {deductionItems.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveItem(index)}
+                            disabled={loading}
+                            className="text-zinc-500 hover:text-red-400 p-1 rounded transition-colors"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {responsibility === 'OWNER' && (
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-extrabold text-zinc-500 uppercase tracking-wider block">Total Repair Cost</label>
+                  <div className="relative">
+                    <Input
+                      type="number"
+                      placeholder="Enter flat cost..."
+                      value={amountInput}
+                      onChange={(e) => setAmountInput(e.target.value)}
+                      disabled={loading}
+                      className="pl-7 bg-zinc-950 border-zinc-900 focus:border-zinc-800 text-xs font-semibold h-10 rounded-xl"
+                    />
+                    <IndianRupee className="h-3.5 w-3.5 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                  </div>
+                </div>
+              )}
+
+              {responsibility !== 'OWNER' && (
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-extrabold text-zinc-500 uppercase tracking-wider block">Recovery Method</label>
+                  <div className="grid grid-cols-3 gap-2.5">
+                    {[
+                      { id: 'DEPOSIT', label: 'Deduct Deposit', icon: Banknote },
+                      { id: 'CASH', label: 'Collect Cash', icon: Banknote },
+                      { id: 'UPI', label: 'Collect UPI', icon: QrCode }
+                    ].map((opt) => {
+                      const isSelected = recoveryMethod === opt.id;
+                      return (
+                        <button
+                          key={opt.id}
+                          onClick={() => setRecoveryMethod(opt.id as any)}
+                          disabled={loading}
+                          className={`py-2 rounded-lg border text-[9px] font-bold uppercase transition-all duration-200 cursor-pointer select-none text-center flex flex-col items-center justify-center gap-1
+                            ${isSelected 
+                              ? 'bg-green-500/10 border-green-500/30 text-green-400' 
+                              : 'bg-zinc-950 border-zinc-900 text-zinc-400 hover:border-zinc-800'}`}
+                        >
+                          <opt.icon className="h-3.5 w-3.5 shrink-0" />
+                          {opt.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-3.5">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-extrabold text-zinc-500 uppercase tracking-wider block flex items-center gap-1">
+                    <FileText className="h-3 w-3" /> Receipt URL
+                  </label>
+                  <Input
+                    placeholder="Link bill receipt..."
+                    value={billUrl}
+                    onChange={(e) => setBillUrl(e.target.value)}
+                    disabled={loading}
+                    className="bg-zinc-950 border-zinc-900 focus:border-zinc-800 text-xs font-semibold h-10 rounded-xl"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-extrabold text-zinc-500 uppercase tracking-wider block flex items-center gap-1">
+                    <Camera className="h-3 w-3" /> Resolved Photo
+                  </label>
+                  <Input
+                    placeholder="Link repair photo..."
+                    value={resolvedImageUrl}
+                    onChange={(e) => setResolvedImageUrl(e.target.value)}
+                    disabled={loading}
+                    className="bg-zinc-950 border-zinc-900 focus:border-zinc-800 text-xs font-semibold h-10 rounded-xl"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-extrabold text-zinc-500 uppercase tracking-wider block">Resolution Notes</label>
+                <textarea
+                  placeholder="Record repairs notes or resolution details permanent audit trails..."
+                  value={resolutionNotes}
+                  onChange={(e) => setResolutionNotes(e.target.value)}
+                  disabled={loading}
+                  rows={2}
+                  className="w-full px-3 py-2 bg-zinc-950 border border-zinc-900 focus:border-zinc-800 text-xs font-semibold placeholder-zinc-700 rounded-xl focus:outline-none transition-all resize-none"
+                />
               </div>
             </div>
-          )}
 
-          {/* Bill Invoice attachment Link */}
-          <div className="space-y-1.5">
-            <label className="text-[10px] font-extrabold text-zinc-500 uppercase tracking-wider block">Repair Bill / Invoice URL</label>
-            <div className="relative">
-              <Input
-                placeholder="Paste repair bill receipt link..."
-                value={billUrl}
-                onChange={(e) => setBillUrl(e.target.value)}
+            <div className="pt-4 border-t border-zinc-900 flex flex-col gap-2">
+              <Button
+                onClick={handleConfirm}
                 disabled={loading}
-                className="pl-8 bg-zinc-950 border-zinc-900 focus:border-zinc-800 text-xs h-10 rounded-xl"
-              />
-              <FileText className="h-4 w-4 text-zinc-650 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-            </div>
-          </div>
-
-          {/* Resolution Photo Link */}
-          <div className="space-y-1.5">
-            <label className="text-[10px] font-extrabold text-zinc-500 uppercase tracking-wider block">Resolution Photo URL</label>
-            <div className="relative">
-              <Input
-                placeholder="Paste resolution/after photo link..."
-                value={resolvedImageUrl}
-                onChange={(e) => setResolvedImageUrl(e.target.value)}
+                className="w-full bg-green-600 hover:bg-green-700 text-white font-extrabold text-xs uppercase tracking-wider h-11 rounded-xl shadow-lg select-none transition-all flex items-center justify-center gap-1.5"
+              >
+                <CheckCircle className="h-4 w-4" />
+                {loading ? 'Resolving...' : 'Resolve Complaint'}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={closeResolveComplaint}
                 disabled={loading}
-                className="pl-8 bg-zinc-950 border-zinc-900 focus:border-zinc-800 text-xs h-10 rounded-xl"
-              />
-              <Camera className="h-4 w-4 text-zinc-650 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                className="w-full border-zinc-900 hover:bg-zinc-900/40 text-zinc-400 hover:text-white font-bold text-xs uppercase tracking-wider h-10 rounded-xl"
+              >
+                Cancel
+              </Button>
             </div>
-          </div>
-
-          {/* Resolution Notes */}
-          <div className="space-y-1.5">
-            <label className="text-[10px] font-extrabold text-zinc-500 uppercase tracking-wider block">Resolution Notes</label>
-            <textarea
-              placeholder="Record repairs notes or resolution details permanent audit trails..."
-              value={resolutionNotes}
-              onChange={(e) => setResolutionNotes(e.target.value)}
-              disabled={loading}
-              rows={2}
-              className="w-full px-3 py-2 bg-zinc-950 border border-zinc-900 focus:border-zinc-800 text-xs font-semibold placeholder-zinc-700 rounded-xl focus:outline-none transition-all resize-none"
-            />
-          </div>
-        </div>
-
-        {/* Footer Actions */}
-        <div className="pt-4 border-t border-zinc-900 flex flex-col gap-2">
-          <Button
-            onClick={handleConfirm}
-            disabled={loading}
-            className="w-full bg-green-600 hover:bg-green-700 text-white font-extrabold text-xs uppercase tracking-wider h-11 rounded-xl shadow-lg select-none transition-all flex items-center justify-center gap-1.5"
-          >
-            <CheckCircle className="h-4 w-4" />
-            {loading ? 'Resolving...' : 'Resolve Complaint'}
-          </Button>
-          <Button
-            variant="outline"
-            onClick={closeResolveComplaint}
-            disabled={loading}
-            className="w-full border-zinc-900 hover:bg-zinc-900/40 text-zinc-400 hover:text-white font-bold text-xs uppercase tracking-wider h-10 rounded-xl"
-          >
-            Cancel
-          </Button>
-        </div>
+          </>
+        )}
       </SheetContent>
     </Sheet>
   );
