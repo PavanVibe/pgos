@@ -302,7 +302,7 @@ export const refundDeposit = async (req: Request, res: Response) => {
 
       // Status mapping based on refundAmount and deduction
       let newStatus = profile.securityDepositStatus;
-      if (parsedRefundAmount === totalCollectedDeposit) {
+      if (parsedRefundAmount + deductionAmount >= totalCollectedDeposit) {
         newStatus = 'REFUNDED';
       } else {
         newStatus = 'PARTIALLY_REFUNDED';

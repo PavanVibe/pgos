@@ -116,13 +116,16 @@ export const getPGDashboardSummary = async (pgId: string, orgId: string) => {
       },
       _sum: { amount: true }
     }),
-    // Refund Liability (Refunded Deposits)
+    // Refund Liability (Refunded Deposits & Damage Deductions)
     prisma.pGTenantProfile.aggregate({
       where: {
         pgId,
         isActive: true
       },
-      _sum: { depositRefundedAmount: true }
+      _sum: { 
+        depositRefundedAmount: true,
+        depositDeductionAmount: true
+      }
     }),
     // Pending Refund Residents (HISTORICAL profiles awaiting refund)
     prisma.pGTenantProfile.count({
@@ -219,7 +222,7 @@ export const getPGDashboardSummary = async (pgId: string, orgId: string) => {
     collectedDeposits: collectedDepositsSum._sum.amount || 0,
     pendingDeposits: pendingDepositsSum._sum.amount || 0,
     refundedDeposits: refundLiabilitySum._sum.depositRefundedAmount || 0,
-    refundLiability: Math.max(0, (collectedDepositsSum._sum.amount || 0) - (refundLiabilitySum._sum.depositRefundedAmount || 0)),
+    refundLiability: Math.max(0, (collectedDepositsSum._sum.amount || 0) - (refundLiabilitySum._sum.depositRefundedAmount || 0) - (refundLiabilitySum._sum.depositDeductionAmount || 0)),
     pendingRefundResidents: pendingRefundResidentsCount
   };
 };

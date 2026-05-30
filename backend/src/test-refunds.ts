@@ -251,8 +251,8 @@ async function main() {
   console.log(`- depositDeductionAmount: ₹${partialProfile?.depositDeductionAmount}`);
   console.log(`- depositRefundNotes: ${partialProfile?.depositRefundNotes}`);
 
-  if (partialProfile?.securityDepositStatus !== 'PARTIALLY_REFUNDED') {
-    throw new Error(`FAIL: Status is ${partialProfile?.securityDepositStatus}, expected PARTIALLY_REFUNDED.`);
+  if (partialProfile?.securityDepositStatus !== 'REFUNDED') {
+    throw new Error(`FAIL: Status is ${partialProfile?.securityDepositStatus}, expected REFUNDED.`);
   }
   if (partialProfile?.depositDeductionAmount !== 2000) {
     throw new Error(`FAIL: Deduction amount is ₹${partialProfile?.depositDeductionAmount}, expected ₹2,000.`);

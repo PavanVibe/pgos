@@ -293,19 +293,53 @@ export default function ResidentProfileDrawer() {
                           {invoices.find((inv: any) => inv.type === 'SECURITY_DEPOSIT' && inv.status === 'PAID')?.paymentMode || 'N/A'}
                         </span>
                       </div>
-                      <div className="pt-3 border-t border-zinc-900/60 col-span-2">
-                        <span className="text-[9px] text-zinc-500 block uppercase tracking-wider font-bold">Refund & Settlement Summary</span>
-                        <span className="font-extrabold text-zinc-300 block mt-0.5 leading-normal">
-                          {profile.depositRefundedAt ? (
-                            <span className="text-purple-400">
-                              Refunded ₹{profile.depositRefundedAmount?.toLocaleString('en-IN')} via <span className="uppercase">{profile.depositRefundMode}</span> on {new Date(profile.depositRefundedAt).toLocaleDateString('en-IN')}
-                              {profile.depositDeductionAmount > 0 && ` (Deduction: ₹${profile.depositDeductionAmount.toLocaleString('en-IN')})`}
+                      {profile.depositRefundedAt ? (
+                        <>
+                          <div className="pt-3 border-t border-zinc-900/60">
+                            <span className="text-[9px] text-zinc-500 block uppercase tracking-wider font-bold">Refund Amount</span>
+                            <span className="font-extrabold text-purple-400 block mt-0.5">
+                              ₹{(profile.depositRefundedAmount ?? 0).toLocaleString('en-IN')}
                             </span>
-                          ) : (
-                            <span className="text-zinc-500">No refunds processed yet.</span>
+                          </div>
+                          <div className="pt-3 border-t border-zinc-900/60">
+                            <span className="text-[9px] text-zinc-500 block uppercase tracking-wider font-bold">Damage Deduction</span>
+                            <span className={`font-extrabold block mt-0.5 ${profile.depositDeductionAmount > 0 ? 'text-red-400' : 'text-zinc-500'}`}>
+                              ₹{(profile.depositDeductionAmount ?? 0).toLocaleString('en-IN')}
+                            </span>
+                          </div>
+                          <div className="pt-3 border-t border-zinc-900/60">
+                            <span className="text-[9px] text-zinc-500 block uppercase tracking-wider font-bold">Refund Date</span>
+                            <span className="font-extrabold text-zinc-300 block mt-0.5">
+                              {new Date(profile.depositRefundedAt).toLocaleDateString('en-IN', {
+                                day: '2-digit',
+                                month: 'short',
+                                year: 'numeric'
+                              })}
+                            </span>
+                          </div>
+                          <div className="pt-3 border-t border-zinc-900/60">
+                            <span className="text-[9px] text-zinc-500 block uppercase tracking-wider font-bold">Refund Mode</span>
+                            <span className="font-extrabold text-zinc-300 block mt-0.5 uppercase">
+                              {profile.depositRefundMode || 'N/A'}
+                            </span>
+                          </div>
+                          {profile.depositRefundNotes && (
+                            <div className="pt-3 border-t border-zinc-900/60 col-span-2">
+                              <span className="text-[9px] text-zinc-500 block uppercase tracking-wider font-bold">Deduction Reason / Notes</span>
+                              <span className="text-zinc-300 block mt-0.5 leading-normal text-xs italic">
+                                "{profile.depositRefundNotes}"
+                              </span>
+                            </div>
                           )}
-                        </span>
-                      </div>
+                        </>
+                      ) : (
+                        <div className="pt-3 border-t border-zinc-900/60 col-span-2">
+                          <span className="text-[9px] text-zinc-500 block uppercase tracking-wider font-bold">Refund & Settlement Summary</span>
+                          <span className="font-extrabold text-zinc-500 block mt-0.5 leading-normal text-xs">
+                            No refunds processed yet.
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
