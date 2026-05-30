@@ -216,7 +216,21 @@ const getDepositLedger = async (req, res) => {
                 moveInDate: 'desc',
             },
         });
-        const ledger = profiles.map((profile) => {
+        // Group profiles by globalTenantId to prioritize the active stay record when one exists
+        const tenantProfilesMap = new Map();
+        for (const p of profiles) {
+            const tenantId = p.globalTenantId;
+            const list = tenantProfilesMap.get(tenantId) || [];
+            list.push(p);
+            tenantProfilesMap.set(tenantId, list);
+        }
+        const consolidatedProfiles = Array.from(tenantProfilesMap.values()).map((tenantProfiles) => {
+            // Find if there is an active/notice stay record
+            const activeProfile = tenantProfiles.find((p) => p.status === 'ACTIVE' || p.status === 'NOTICE');
+            // If an active/notice stay exists, use it. Otherwise use the most recent stay (first in array since we ordered by moveInDate desc)
+            return activeProfile || tenantProfiles[0];
+        });
+        const ledger = consolidatedProfiles.map((profile) => {
             const depositInvoice = profile.invoices.find((inv) => inv.type === 'SECURITY_DEPOSIT' && inv.status !== 'PAID') || profile.invoices.find((inv) => inv.type === 'SECURITY_DEPOSIT');
             return {
                 id: profile.id,
