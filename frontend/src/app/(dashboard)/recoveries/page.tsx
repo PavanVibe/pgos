@@ -58,6 +58,7 @@ interface RecoveryRow {
   items: RecoveryItem[];
   depositTransactions: any[];
   recoveryTransactions: any[];
+  refundableDeposit: number;
 }
 
 function RecoveriesLedgerContent() {
@@ -74,7 +75,7 @@ function RecoveriesLedgerContent() {
 
   // Modal / Action states
   const [actionRecovery, setActionRecovery] = useState<RecoveryRow | null>(null);
-  const [actionType, setActionType] = useState<'DISPUTE' | 'WAIVE' | 'COLLECT' | null>(null);
+  const [actionType, setActionType] = useState<'DISPUTE' | 'WAIVE' | 'COLLECT' | 'DEDUCT_DEPOSIT' | null>(null);
 
   // Details Drawer state
   const [selectedRecoveryForDetails, setSelectedRecoveryForDetails] = useState<RecoveryRow | null>(null);
@@ -205,7 +206,7 @@ function RecoveriesLedgerContent() {
     });
   };
 
-  const handleOpenActionModal = (row: RecoveryRow, type: 'DISPUTE' | 'WAIVE' | 'COLLECT') => {
+  const handleOpenActionModal = (row: RecoveryRow, type: 'DISPUTE' | 'WAIVE' | 'COLLECT' | 'DEDUCT_DEPOSIT', preselectedMode?: 'UPI' | 'CASH') => {
     if (row.settlementStatus === 'LOCKED') {
       toast.error('Stay record is LOCKED. No modifications allowed.');
       return;
@@ -214,7 +215,7 @@ function RecoveriesLedgerContent() {
     setActionType(type);
     setReasonInput('');
     setAmountReceived(row.outstandingAmount.toString());
-    setPaymentMode('UPI');
+    setPaymentMode(type === 'DEDUCT_DEPOSIT' ? 'DEPOSIT' : (preselectedMode || 'UPI'));
     setReferenceNumber('');
     setNotes('');
   };
@@ -245,7 +246,7 @@ function RecoveriesLedgerContent() {
         status: 'WAIVED',
         reason: reasonInput.trim()
       });
-    } else if (actionType === 'COLLECT') {
+    } else if (actionType === 'COLLECT' || actionType === 'DEDUCT_DEPOSIT') {
       const amt = parseFloat(amountReceived);
       if (isNaN(amt) || amt <= 0) {
         toast.error('Please specify a valid collection amount.');
@@ -255,12 +256,20 @@ function RecoveriesLedgerContent() {
         toast.error(`Received amount cannot exceed the outstanding liability of ₹${actionRecovery.outstandingAmount}`);
         return;
       }
+
+      const mode = actionType === 'DEDUCT_DEPOSIT' ? 'DEPOSIT' : paymentMode;
+
+      if (mode === 'DEPOSIT' && amt > actionRecovery.refundableDeposit) {
+        toast.error(`Deduction amount exceeds resident's available refundable deposit of ₹${actionRecovery.refundableDeposit}`);
+        return;
+      }
+
       updateStatusMutation.mutate({
         status: 'RECOVERED',
         amountReceived: amt,
-        paymentMode,
+        paymentMode: mode,
         referenceNumber: referenceNumber.trim() || undefined,
-        notes: notes.trim() || undefined
+        notes: notes.trim() || (actionType === 'DEDUCT_DEPOSIT' ? 'Deducted from security deposit' : undefined)
       });
     }
   };
@@ -641,89 +650,33 @@ function RecoveriesLedgerContent() {
                     {/* Action buttons */}
                     <td className="p-4 text-right" onClick={(e) => e.stopPropagation()}>
                       {isLocked ? (
-                        <span className="text-[10px] text-zinc-600 font-bold uppercase tracking-wider">Settled & Locked</span>
+                        <span className="text-[10px] text-zinc-650 font-bold uppercase tracking-wider">Settled & Locked</span>
+                      ) : row.outstandingAmount === 0 || row.status === 'WAIVED' ? (
+                        <span className="text-zinc-550 font-semibold select-none text-[10px] uppercase">No Dues Pending</span>
                       ) : (
-                        <div className="flex justify-end gap-1.5">
-                          {row.status === 'PENDING' && (
-                            <>
-                              <button
-                                onClick={(e) => { e.stopPropagation(); handleQuickAccept(row); }}
-                                className="px-2 py-1 rounded bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 border border-purple-500/30 hover:border-purple-500/50 text-[9px] font-bold uppercase cursor-pointer transition-colors"
-                              >
-                                <Check className="h-3.5 w-3.5 inline-block -mt-0.5 mr-0.5" /> Accept
-                              </button>
-                              <button
-                                onClick={(e) => { e.stopPropagation(); handleOpenActionModal(row, 'DISPUTE'); }}
-                                className="px-2 py-1 rounded bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 hover:border-red-500/50 text-[9px] font-bold uppercase cursor-pointer transition-colors"
-                              >
-                                Dispute
-                              </button>
-                              <button
-                                onClick={(e) => { e.stopPropagation(); handleOpenActionModal(row, 'WAIVE'); }}
-                                className="px-2 py-1 rounded bg-zinc-900 hover:bg-zinc-850 text-zinc-300 border border-zinc-800 hover:border-zinc-700 text-[9px] font-bold uppercase cursor-pointer transition-colors"
-                              >
-                                Waive
-                              </button>
-                            </>
-                          )}
-
-                          {row.status === 'DISPUTED' && (
-                            <>
-                              <button
-                                onClick={(e) => { e.stopPropagation(); handleQuickAccept(row); }}
-                                className="px-2 py-1 rounded bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 border border-purple-500/30 hover:border-purple-500/50 text-[9px] font-bold uppercase cursor-pointer transition-colors"
-                              >
-                                Accept
-                              </button>
-                              <button
-                                onClick={(e) => { e.stopPropagation(); handleOpenActionModal(row, 'WAIVE'); }}
-                                className="px-2 py-1 rounded bg-zinc-900 hover:bg-zinc-850 text-zinc-300 border border-zinc-800 hover:border-zinc-700 text-[9px] font-bold uppercase cursor-pointer transition-colors"
-                              >
-                                Waive
-                              </button>
-                            </>
-                          )}
-
-                          {row.status === 'ACCEPTED' && (
-                            <>
-                              {row.recoveryMethod === 'DEPOSIT' ? (
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); handleQuickDeductDeposit(row); }}
-                                  className="inline-flex items-center gap-0.5 px-2.5 py-1 rounded border border-blue-900/40 hover:border-blue-800 bg-blue-950/20 hover:bg-blue-950/40 text-[9px] font-bold uppercase text-blue-400 hover:text-blue-350 cursor-pointer transition-colors"
-                                >
-                                  <UserCheck className="h-3 w-3" /> Deduct Deposit
-                                </button>
-                              ) : (
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); handleOpenActionModal(row, 'COLLECT'); }}
-                                  className="inline-flex items-center gap-0.5 px-2.5 py-1 rounded border border-green-900/40 hover:border-green-800 bg-green-950/20 hover:bg-green-950/40 text-[9px] font-bold uppercase text-green-400 hover:text-green-350 cursor-pointer transition-colors"
-                                >
-                                  <Wallet className="h-3 w-3" /> Collect Payment
-                                </button>
-                              )}
-                            </>
-                          )}
-
-                          {row.status === 'PARTIALLY_RECOVERED' && (
-                            <div className="flex gap-1.5 justify-end">
-                              <button
-                                onClick={(e) => { e.stopPropagation(); handleOpenActionModal(row, 'COLLECT'); }}
-                                className="inline-flex items-center gap-0.5 px-2 py-1 rounded border border-green-900/40 hover:border-green-800 bg-green-950/20 hover:bg-green-950/40 text-[9px] font-bold uppercase text-green-400 hover:text-green-350 cursor-pointer transition-colors"
-                              >
-                                <Wallet className="h-3 w-3" /> Collect Remaining
-                              </button>
-                              <button
-                                onClick={(e) => { e.stopPropagation(); handleOpenActionModal(row, 'WAIVE'); }}
-                                className="px-2 py-1 rounded bg-zinc-900 hover:bg-zinc-850 text-zinc-300 border border-zinc-800 hover:border-zinc-700 text-[9px] font-bold uppercase cursor-pointer transition-colors"
-                              >
-                                Waive Remaining
-                              </button>
-                            </div>
-                          )}
-
-                          {(row.status as string === 'FULLY_RECOVERED' || row.status === 'WAIVED') && (
-                            <span className="text-zinc-650 font-semibold select-none">-</span>
-                          )}
+                        <div className="flex justify-end">
+                          <select
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (val === 'upi') handleOpenActionModal(row, 'COLLECT', 'UPI');
+                              if (val === 'cash') handleOpenActionModal(row, 'COLLECT', 'CASH');
+                              if (val === 'deposit') handleOpenActionModal(row, 'DEDUCT_DEPOSIT');
+                              if (val === 'waive') handleOpenActionModal(row, 'WAIVE');
+                              if (val === 'dispute') handleOpenActionModal(row, 'DISPUTE');
+                              e.target.value = ''; // reset selection
+                            }}
+                            className="bg-zinc-900 border border-zinc-800 text-[10px] font-black uppercase tracking-wider px-2.5 py-1.5 rounded-lg focus:outline-none text-zinc-300 hover:text-white cursor-pointer select-none"
+                            defaultValue=""
+                          >
+                            <option value="" disabled>Actions</option>
+                            <option value="upi" className="bg-zinc-950 text-white font-bold uppercase">Collect UPI</option>
+                            <option value="cash" className="bg-zinc-950 text-white font-bold uppercase">Collect Cash</option>
+                            {row.refundableDeposit > 0 && (
+                              <option value="deposit" className="bg-zinc-950 text-blue-400 font-bold uppercase">Deduct Deposit (₹{row.refundableDeposit})</option>
+                            )}
+                            <option value="waive" className="bg-zinc-950 text-zinc-400 font-bold uppercase">Waive</option>
+                            <option value="dispute" className="bg-zinc-950 text-red-400 font-bold uppercase">Dispute</option>
+                          </select>
                         </div>
                       )}
                     </td>
@@ -745,6 +698,7 @@ function RecoveriesLedgerContent() {
                   {actionType === 'DISPUTE' && 'Log Dispute Request'}
                   {actionType === 'WAIVE' && 'Waive Repair Recovery'}
                   {actionType === 'COLLECT' && 'Record Recovery Payment'}
+                  {actionType === 'DEDUCT_DEPOSIT' && 'Deduct from Security Deposit'}
                 </h3>
                 <p className="text-xs text-zinc-400 mt-1">
                   Resident: <span className="font-extrabold text-zinc-300">{actionRecovery.residentName}</span> (Room {actionRecovery.roomNumber})
@@ -831,6 +785,70 @@ function RecoveriesLedgerContent() {
                     <label className="text-[10px] font-extrabold text-zinc-500 uppercase tracking-wider block">Collection Notes (Optional)</label>
                     <textarea
                       placeholder="Any notes about the payment..."
+                      value={notes}
+                      onChange={(e) => setNotes(e.target.value)}
+                      rows={2}
+                      className="w-full px-3 py-2 bg-black border border-zinc-900 focus:border-zinc-800 text-xs font-semibold placeholder-zinc-700 rounded-lg focus:outline-none transition-all resize-none text-white"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* DEPOSIT DEDUCTION FIELDS */}
+              {actionType === 'DEDUCT_DEPOSIT' && (
+                <div className="space-y-4">
+                  {/* Refundable Deposit Stats Banner */}
+                  <div className="bg-blue-500/5 border border-blue-500/10 p-3 rounded-xl flex justify-between items-center text-xs">
+                    <div>
+                      <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider block">Refundable Deposit Available</span>
+                      <span className="text-sm font-black text-blue-400">
+                        ₹{(actionRecovery.refundableDeposit || 0).toLocaleString('en-IN')}
+                      </span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider block">Outstanding Recovery</span>
+                      <span className="text-sm font-black text-amber-400">
+                        ₹{actionRecovery.outstandingAmount.toLocaleString('en-IN')}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1.5 col-span-2">
+                      <label className="text-[10px] font-extrabold text-zinc-500 uppercase tracking-wider block">Amount to Deduct (₹)</label>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          value={amountReceived}
+                          onChange={(e) => setAmountReceived(e.target.value)}
+                          className="w-full bg-black border border-zinc-900 text-xs font-bold h-9 pl-7 pr-3 rounded-lg focus:outline-none focus:border-zinc-800 text-white"
+                        />
+                        <IndianRupee className="h-3.5 w-3.5 text-zinc-650 absolute left-2 top-1/2 -translate-y-1/2" />
+                      </div>
+                      <div className="flex gap-1.5 mt-1.5">
+                        <button
+                          onClick={() => setAmountReceived(actionRecovery.outstandingAmount.toString())}
+                          className="text-[9px] font-black uppercase text-zinc-400 hover:text-white bg-zinc-900 border border-zinc-800 px-2 py-1 rounded cursor-pointer"
+                        >
+                          Full Deduction (₹{actionRecovery.outstandingAmount})
+                        </button>
+                        <button
+                          onClick={() => {
+                            const minVal = Math.min(actionRecovery.outstandingAmount, actionRecovery.refundableDeposit);
+                            setAmountReceived((minVal / 2).toString());
+                          }}
+                          className="text-[9px] font-black uppercase text-zinc-400 hover:text-white bg-zinc-900 border border-zinc-800 px-2 py-1 rounded cursor-pointer"
+                        >
+                          Partial (50%)
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-extrabold text-zinc-500 uppercase tracking-wider block">Deduction Notes / Reason (Optional)</label>
+                    <textarea
+                      placeholder="Any notes for the security deposit deduction statement..."
                       value={notes}
                       onChange={(e) => setNotes(e.target.value)}
                       rows={2}

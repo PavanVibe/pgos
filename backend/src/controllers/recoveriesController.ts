@@ -53,10 +53,28 @@ export const getRecoveriesLedger = async (req: Request, res: Response) => {
       orderBy: { createdAt: 'desc' },
     });
 
+    // Fetch all Security Deposit invoices for these tenants
+    const tenantIds = recoveries.map(r => r.tenantId).filter(Boolean) as string[];
+    const depositInvoices = await prisma.rentInvoice.findMany({
+      where: {
+        pgTenantId: { in: tenantIds },
+        type: 'SECURITY_DEPOSIT',
+        status: 'PAID',
+        isActive: true
+      }
+    });
+
     const ledger = recoveries.map((rec) => {
       const tenant = rec.tenantProfile;
+      const tenantInvoices = depositInvoices.filter(inv => inv.pgTenantId === rec.tenantId);
+      const collectedDeposit = tenantInvoices.reduce((sum, inv) => sum + inv.amount, 0);
+      const totalDeductions = tenant?.depositDeductionAmount || 0;
+      const refundedAmount = tenant?.depositRefundedAmount || 0;
+      const refundableDeposit = Math.max(0, collectedDeposit - refundedAmount - totalDeductions);
+
       return {
         id: rec.id,
+        tenantProfileId: rec.tenantId,
         residentName: tenant?.globalTenant?.name || 'Unknown',
         phone: tenant?.globalTenant?.phone,
         roomNumber: tenant?.room?.number || tenant?.historicalRoomNumber || '-',
@@ -82,7 +100,8 @@ export const getRecoveriesLedger = async (req: Request, res: Response) => {
           notes: item.notes
         })),
         depositTransactions: rec.depositTransactions || [],
-        recoveryTransactions: rec.recoveryTransactions || []
+        recoveryTransactions: rec.recoveryTransactions || [],
+        refundableDeposit
       };
     });
 
@@ -410,7 +429,9 @@ export const updateRecoveryStatus = async (req: Request, res: Response) => {
           const collectedDeposit = targetProfile.invoices.reduce((sum, inv) => sum + inv.amount, 0);
           const refundedAmount = targetProfile.depositRefundedAmount || 0;
           const previouslyDeducted = targetProfile.depositDeductionAmount || 0;
-          const pendingRecoveries = targetProfile.damageRecoveries.reduce((sum, rec) => sum + rec.amount, 0);
+          const pendingRecoveries = targetProfile.damageRecoveries
+            .filter((r) => r.id !== recovery.id)
+            .reduce((sum, rec) => sum + rec.amount, 0);
 
           const remainingRefundableDeposit = Math.max(0, collectedDeposit - refundedAmount - previouslyDeducted - pendingRecoveries);
 
