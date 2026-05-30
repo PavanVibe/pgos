@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from "react"
+import { useRouter } from "next/navigation";
 import {
   CreditCard,
   Settings,
@@ -26,6 +27,7 @@ import { useOnboardingStore } from "@/store/useOnboardingStore"
 // import { useVacateStore } from "@/store/useVacateStore"
 
 export function UniversalActionSheet({ pgId }: { pgId: string }) {
+  const router = useRouter();
   const [open, setOpen] = React.useState(false)
   const { openOnboarding } = useOnboardingStore();
 
@@ -75,7 +77,7 @@ export function UniversalActionSheet({ pgId }: { pgId: string }) {
         </CommandGroup>
         <CommandSeparator />
         <CommandGroup heading="Settings">
-          <CommandItem onSelect={() => runCommand(() => console.log('PG Settings'))}>
+          <CommandItem onSelect={() => runCommand(() => router.push('/settings/pgs'))}>
             <Settings className="mr-2 h-4 w-4" />
             <span>PG Settings</span>
           </CommandItem>

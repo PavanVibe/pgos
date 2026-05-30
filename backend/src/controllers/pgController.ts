@@ -53,6 +53,56 @@ export const getOrganizationPGs = async (req: Request, res: Response) => {
   }
 };
 
+const createRoomSchema = z.object({
+  number: z.string(),
+  floor: z.string().optional(),
+  capacity: z.number().int().positive(),
+  monthlyRent: z.number().positive()
+});
+
+export const createRoom = async (req: Request, res: Response) => {
+  try {
+    const pgId = (req as any).pg?.id || req.params.pgId;
+    if (!pgId) {
+      return res.status(400).json({ error: 'PG ID context is required.' });
+    }
+
+    const { number, floor, capacity, monthlyRent } = createRoomSchema.parse(req.body);
+
+    const room = await prisma.$transaction(async (tx) => {
+      const newRoom = await tx.room.create({
+        data: {
+          pgId,
+          number,
+          floor,
+          capacity
+        }
+      });
+
+      // Generate bed records
+      const bedsData = Array.from({ length: capacity }).map((_, idx) => ({
+        roomId: newRoom.id,
+        bedNumber: `B${idx + 1}`,
+        monthlyRent,
+        isActive: true
+      }));
+
+      await tx.bed.createMany({
+        data: bedsData
+      });
+
+      return tx.room.findUnique({
+        where: { id: newRoom.id },
+        include: { beds: true }
+      });
+    });
+
+    res.status(201).json({ status: 'success', data: room });
+  } catch (error: any) {
+    res.status(400).json({ error: error.message || 'Invalid Request' });
+  }
+};
+
 export const allocateBedController = async (req: Request, res: Response) => {
   try {
     const pgId = (req as any).pg?.id || req.params.pgId;

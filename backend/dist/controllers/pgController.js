@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.saveTenantNoteManual = exports.sendReminderManual = exports.getOverdueResidentsManual = exports.scanOverdueManual = exports.generateInvoicesManual = exports.getRoomHistory = exports.getPGComplaint = exports.getPGComplaints = exports.resolveComplaint = exports.createComplaint = exports.payRent = exports.getPGRooms = exports.allocateBedController = exports.getOrganizationPGs = exports.createPG = void 0;
+exports.saveTenantNoteManual = exports.sendReminderManual = exports.getOverdueResidentsManual = exports.scanOverdueManual = exports.generateInvoicesManual = exports.getRoomHistory = exports.getPGComplaint = exports.getPGComplaints = exports.resolveComplaint = exports.createComplaint = exports.payRent = exports.getPGRooms = exports.allocateBedController = exports.createRoom = exports.getOrganizationPGs = exports.createPG = void 0;
 const client_1 = require("@prisma/client");
 const prisma_1 = __importDefault(require("../utils/prisma"));
 const bedService_1 = require("../services/bedService");
@@ -54,6 +54,50 @@ const getOrganizationPGs = async (req, res) => {
     }
 };
 exports.getOrganizationPGs = getOrganizationPGs;
+const createRoomSchema = zod_1.z.object({
+    number: zod_1.z.string(),
+    floor: zod_1.z.string().optional(),
+    capacity: zod_1.z.number().int().positive(),
+    monthlyRent: zod_1.z.number().positive()
+});
+const createRoom = async (req, res) => {
+    try {
+        const pgId = req.pg?.id || req.params.pgId;
+        if (!pgId) {
+            return res.status(400).json({ error: 'PG ID context is required.' });
+        }
+        const { number, floor, capacity, monthlyRent } = createRoomSchema.parse(req.body);
+        const room = await prisma_1.default.$transaction(async (tx) => {
+            const newRoom = await tx.room.create({
+                data: {
+                    pgId,
+                    number,
+                    floor,
+                    capacity
+                }
+            });
+            // Generate bed records
+            const bedsData = Array.from({ length: capacity }).map((_, idx) => ({
+                roomId: newRoom.id,
+                bedNumber: `B${idx + 1}`,
+                monthlyRent,
+                isActive: true
+            }));
+            await tx.bed.createMany({
+                data: bedsData
+            });
+            return tx.room.findUnique({
+                where: { id: newRoom.id },
+                include: { beds: true }
+            });
+        });
+        res.status(201).json({ status: 'success', data: room });
+    }
+    catch (error) {
+        res.status(400).json({ error: error.message || 'Invalid Request' });
+    }
+};
+exports.createRoom = createRoom;
 const allocateBedController = async (req, res) => {
     try {
         const pgId = req.pg?.id || req.params.pgId;

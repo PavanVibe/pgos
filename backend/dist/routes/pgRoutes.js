@@ -24,6 +24,7 @@ router.get('/:pgId/dashboard/summary', rbacMiddleware_1.canAccessPG, dashboardCo
 router.use('/:pgId/dashboard', dashboardRoutes_1.default);
 // PGRooms (Bed selector & Room History)
 router.get('/:pgId/rooms', rbacMiddleware_1.canAccessPG, pgController_1.getPGRooms);
+router.post('/:pgId/rooms', rbacMiddleware_1.canAccessPG, pgController_1.createRoom);
 router.get('/:pgId/rooms/:roomId/history', rbacMiddleware_1.canAccessPG, pgController_1.getRoomHistory);
 // Operations Mutations
 router.post('/:pgId/tenants/:tenantId/pay-rent', rbacMiddleware_1.canAccessPG, pgController_1.payRent);

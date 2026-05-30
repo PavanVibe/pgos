@@ -4,6 +4,7 @@ import {
   getOrganizationPGs, 
   allocateBedController,
   getPGRooms,
+  createRoom,
   getRoomHistory,
   payRent,
   createComplaint,
@@ -41,6 +42,7 @@ router.use('/:pgId/dashboard', dashboardRoutes);
 
 // PGRooms (Bed selector & Room History)
 router.get('/:pgId/rooms', canAccessPG, getPGRooms);
+router.post('/:pgId/rooms', canAccessPG, createRoom);
 router.get('/:pgId/rooms/:roomId/history', canAccessPG, getRoomHistory);
 
 // Operations Mutations
