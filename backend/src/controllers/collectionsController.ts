@@ -256,6 +256,26 @@ export const getDepositLedger = async (req: Request, res: Response) => {
       return activeProfile || tenantProfiles[0]!;
     });
 
+    // Heal missing deposit invoices for residents with expected deposits but no invoice record
+    for (const profile of consolidatedProfiles) {
+      const expectedDeposit = profile.securityDeposit;
+      const depositInvoices = profile.invoices.filter(inv => inv.type === 'SECURITY_DEPOSIT');
+      
+      if (expectedDeposit > 0 && depositInvoices.length === 0 && (profile.securityDepositStatus === 'PENDING' || profile.securityDepositStatus === 'PARTIALLY_PAID')) {
+        const newInvoice = await prisma.rentInvoice.create({
+          data: {
+            pgTenantId: profile.id,
+            amount: expectedDeposit,
+            dueDate: profile.moveInDate || new Date(),
+            status: 'PENDING',
+            type: 'SECURITY_DEPOSIT',
+            createdBy: 'system_healing'
+          }
+        });
+        profile.invoices.push(newInvoice);
+      }
+    }
+
     const ledger = consolidatedProfiles.map((profile) => {
       const depositInvoice = profile.invoices.find(
         (inv) => inv.type === 'SECURITY_DEPOSIT' && inv.status !== 'PAID'
@@ -268,7 +288,7 @@ export const getDepositLedger = async (req: Request, res: Response) => {
         roomNumber: profile.room?.number || profile.historicalRoomNumber || '-',
         bedNumber: profile.bed?.bedNumber || profile.historicalBedNumber || '-',
         depositAmount: profile.securityDeposit,
-        status: profile.securityDepositStatus, // COLLECTED / PENDING / PARTIALLY_PAID
+        status: profile.securityDeposit === 0 ? 'NO_DEPOSIT_REQUIRED' : profile.securityDepositStatus, // COLLECTED / PENDING / PARTIALLY_PAID / NO_DEPOSIT_REQUIRED
         collectedDate: profile.depositCollectedAt || null,
         paymentMode: depositInvoice?.status === 'PAID' ? depositInvoice?.paymentMode : null,
         refundStatus: profile.depositRefundedAt ? 'REFUNDED' : 'NOT_REFUNDED',

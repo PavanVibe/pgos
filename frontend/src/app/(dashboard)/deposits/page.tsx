@@ -30,7 +30,7 @@ interface DepositRow {
   roomNumber: string;
   bedNumber: string;
   depositAmount: number;
-  status: 'COLLECTED' | 'PENDING' | 'PARTIALLY_PAID';
+  status: 'COLLECTED' | 'PENDING' | 'PARTIALLY_PAID' | 'NO_DEPOSIT_REQUIRED';
   collectedDate: string | null;
   paymentMode: string | null;
   refundStatus: 'REFUNDED' | 'NOT_REFUNDED';
@@ -104,6 +104,13 @@ export default function DepositsLedgerPage() {
         return (
           <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20">
             <AlertCircle className="h-3 w-3" /> PARTIAL
+          </span>
+        );
+      case 'NO_DEPOSIT_REQUIRED':
+      case 'N/A':
+        return (
+          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-zinc-900 text-zinc-500 border border-zinc-800">
+            N/A
           </span>
         );
       case 'PENDING':
