@@ -110,7 +110,8 @@ export const webhook = async (req: Request, res: Response) => {
           referenceId,
           transactionId,
           amountPaid,
-          paymentMethod
+          paymentMethod,
+          req.body.id
         );
       }
     }

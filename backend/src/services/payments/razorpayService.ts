@@ -32,7 +32,7 @@ export class RazorpayService {
 
     if (razorpay) {
       try {
-        const link = await razorpay.paymentLink.create({
+        const createPromise = razorpay.paymentLink.create({
           amount: amountInPaise,
           currency: 'INR',
           accept_partial: true,
@@ -54,6 +54,12 @@ export class RazorpayService {
             }
           }
         });
+
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Razorpay API request timed out')), 250)
+        );
+
+        const link = await Promise.race([createPromise, timeoutPromise]) as any;
         paymentUrl = link.short_url;
         razorpayPaymentLinkId = link.id;
       } catch (err: any) {
@@ -104,9 +110,27 @@ export class RazorpayService {
     referenceId: string,
     transactionId: string,
     amountPaid: number,
-    paymentMethod: string
+    paymentMethod: string,
+    webhookEventId?: string
   ) {
     return await prisma.$transaction(async (tx) => {
+      // 0. Event ID check for absolute duplicate protection
+      if (webhookEventId) {
+        const logs = await tx.auditLog.findMany({
+          where: { action: 'ONLINE_PAYMENT_CAPTURED' }
+        });
+        const duplicate = logs.find(log => {
+          const meta = log.metadata as any;
+          return meta && meta.webhookEventId === webhookEventId;
+        });
+        if (duplicate) {
+          console.log(`[RAZORPAY WEBHOOK WARNING] Webhook Event ID ${webhookEventId} already processed. Skipping.`);
+          return await tx.paymentReceipt.findFirst({
+            where: { transactionId }
+          });
+        }
+      }
+
       // 1. Audit Check: Prevent duplicate payment updates
       const existingReceipt = await tx.paymentReceipt.findUnique({
         where: { transactionId }
@@ -259,7 +283,8 @@ export class RazorpayService {
             paymentMethod,
             transactionId,
             referenceId,
-            receiptNumber
+            receiptNumber,
+            webhookEventId
           }
         }
       });

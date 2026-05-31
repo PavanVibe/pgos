@@ -77,7 +77,7 @@ async function main() {
   
   // 1. Generate Payment Link for Rent
   console.log("Waiting for auto-generated payment links to persist...");
-  await new Promise(resolve => setTimeout(resolve, 300));
+  await new Promise(resolve => setTimeout(resolve, 1000));
   const rentLink1 = await prisma.paymentLink.findFirst({
     where: { invoiceId: rentInvoice.id }
   });
@@ -120,21 +120,27 @@ async function main() {
 
   // 3. Duplicate webhook capture check (Skipping duplicates cleanly)
   const duplicateTxnId = `pay_rent_partial_10_duplicate`;
+  const mockWebhookEventId = `evt_rent_duplicate_12345`;
   // First payment
   const firstReceipt = await RazorpayService.processSuccessfulPayment(
     rentLink1.referenceId,
     duplicateTxnId,
     1000,
-    'upi'
+    'upi',
+    mockWebhookEventId
   );
   // Duplicate process call
   const duplicateReceipt = await RazorpayService.processSuccessfulPayment(
     rentLink1.referenceId,
     duplicateTxnId,
     1000,
-    'upi'
+    'upi',
+    mockWebhookEventId
   );
   
+  if (!firstReceipt || !duplicateReceipt) {
+    throw new Error("Receipts missing after duplicate payment check!");
+  }
   if (firstReceipt.id !== duplicateReceipt.id) {
     throw new Error("Duplicate capture created multiple records!");
   }
@@ -202,7 +208,7 @@ async function main() {
   });
 
   console.log("Waiting for auto-generated damage recovery link to persist...");
-  await new Promise(resolve => setTimeout(resolve, 300));
+  await new Promise(resolve => setTimeout(resolve, 1000));
   const recLink = await prisma.paymentLink.findFirst({
     where: { recoveryId: recovery.id }
   });
