@@ -11,7 +11,7 @@ export class PayRentWorkflow {
   static async execute(
     pgId: string,
     tenantId: string,
-    method: 'upi' | 'cash',
+    method: string,
     actorId: string,
     amount?: number,
     invoiceId?: string,

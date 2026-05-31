@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { searchByPhone, onboard, lockBedForOnboarding, vacate, getResidentProfile } from '../controllers/tenantController';
+import { searchByPhone, onboard, lockBedForOnboarding, vacate, getResidentProfile, settleMoveout } from '../controllers/tenantController';
 import { requireAuth, attachOrgContext } from '../middlewares/authMiddleware';
 import { canAccessOrganization, canAccessPG, auditAction } from '../middlewares/rbacMiddleware';
 
@@ -28,6 +28,12 @@ router.post(
   canAccessPG,
   auditAction('VACATE_RESIDENT', 'PGTenantProfile'),
   vacate
+);
+
+router.post(
+  '/pgs/:pgId/tenants/:tenantId/settle-moveout',
+  canAccessPG,
+  settleMoveout
 );
 
 export default router;

@@ -194,8 +194,8 @@ export const payRent = async (req: Request, res: Response) => {
       paymentMode = req.body.method;
     }
 
-    if (!paymentMode || (paymentMode !== 'upi' && paymentMode !== 'cash')) {
-      return res.status(400).json({ error: 'Valid payment method (upi/cash) is required.' });
+    if (!paymentMode || (paymentMode !== 'upi' && paymentMode !== 'cash' && paymentMode !== 'bank_transfer' && paymentMode !== 'cheque')) {
+      return res.status(400).json({ error: 'Valid payment method (upi/cash/bank_transfer/cheque) is required.' });
     }
 
     const parsedAmount = amount !== undefined && amount !== null ? parseFloat(amount) : undefined;
@@ -229,8 +229,8 @@ export const payDeposit = async (req: Request, res: Response) => {
       paymentMode = req.body.method;
     }
 
-    if (!paymentMode || (paymentMode !== 'upi' && paymentMode !== 'cash' && paymentMode !== 'bank_transfer')) {
-      return res.status(400).json({ error: 'Valid payment method (upi/cash/bank_transfer) is required.' });
+    if (!paymentMode || (paymentMode !== 'upi' && paymentMode !== 'cash' && paymentMode !== 'bank_transfer' && paymentMode !== 'cheque')) {
+      return res.status(400).json({ error: 'Valid payment method (upi/cash/bank_transfer/cheque) is required.' });
     }
 
     const parsedAmount = amount !== undefined && amount !== null ? parseFloat(amount) : undefined;

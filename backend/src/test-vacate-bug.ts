@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import prisma from './utils/prisma';
 import { OnboardResidentWorkflow } from './services/workflows/OnboardResidentWorkflow';
 import { VacateResidentWorkflow } from './services/workflows/VacateResidentWorkflow';

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useOrganizationStore } from '@/store/useOrganizationStore';
 import { fetchApi } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -19,10 +19,19 @@ import {
   AlertCircle, 
   Copy, 
   Printer, 
-  FileSpreadsheet
+  FileSpreadsheet,
+  QrCode,
+  Banknote,
+  Building,
+  CreditCard,
+  Wallet
 } from 'lucide-react';
 import Link from 'next/link';
 import { toast } from 'sonner';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { useResidentProfileStore } from '@/store/useResidentProfileStore';
 
 interface HistoricalMonth {
   month: string;
@@ -53,6 +62,8 @@ interface LedgerRow {
 
 export default function CollectionsHistoryPage() {
   const { activePgId, availablePgs, setActivePgId } = useOrganizationStore();
+  const { openProfile } = useResidentProfileStore();
+  const queryClient = useQueryClient();
   const [selectedLedgerMonth, setSelectedLedgerMonth] = useState<{ month: string; year: number; index: number } | null>(null);
 
   // Filters State
@@ -60,6 +71,14 @@ export default function CollectionsHistoryPage() {
   const [yearFilter, setYearFilter] = useState<string>('all');
   const [paymentModeFilter, setPaymentModeFilter] = useState<string>('all');
   const [transactionTypeFilter, setTransactionTypeFilter] = useState<string>('all');
+
+  // Universal Payment sheet states
+  const [isPaymentSheetOpen, setIsPaymentSheetOpen] = useState(false);
+  const [selectedPaymentRow, setSelectedPaymentRow] = useState<any | null>(null);
+  const [amountInput, setAmountInput] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState<'upi' | 'cash' | 'bank_transfer' | 'cheque' | 'deposit'>('upi');
+  const [referenceId, setReferenceId] = useState('');
+  const [collectionNotes, setCollectionNotes] = useState('');
 
   // 1. Fetch Collections History Cards
   const { data: historyResponse, isLoading: historyLoading } = useQuery({
@@ -111,25 +130,87 @@ export default function CollectionsHistoryPage() {
     return 'text-red-400 border-red-500/20 bg-red-500/5';
   };
 
+  // Payment mutation for Rent, Deposits, and Damage Recoveries
+  const payMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedPaymentRow) return;
+      const parsedAmount = parseFloat(amountInput) || 0;
+      
+      if (selectedPaymentRow.type === 'DAMAGE_RECOVERY') {
+        return fetchApi(`/pgs/${activePgId}/recoveries/${selectedPaymentRow.id}/status`, {
+          method: 'POST',
+          body: JSON.stringify({
+            status: parsedAmount >= selectedPaymentRow.dueAmount ? 'FULLY_RECOVERED' : 'PARTIALLY_RECOVERED',
+            amountReceived: parsedAmount,
+            paymentMode: paymentMethod.toUpperCase(),
+            referenceNumber: referenceId,
+            notes: collectionNotes
+          })
+        });
+      } else {
+        const endpoint = selectedPaymentRow.type === 'SECURITY_DEPOSIT' ? 'pay-deposit' : 'pay-rent';
+        return fetchApi(`/pgs/${activePgId}/tenants/${selectedPaymentRow.tenantProfileId}/${endpoint}`, {
+          method: 'POST',
+          body: JSON.stringify({
+            amount: parsedAmount,
+            paymentMode: paymentMethod,
+            referenceId,
+            invoiceId: selectedPaymentRow.id
+          })
+        });
+      }
+    },
+    onSuccess: () => {
+      toast.success('Collection recorded successfully');
+      queryClient.invalidateQueries({ queryKey: ['collection-ledger', activePgId] });
+      queryClient.invalidateQueries({ queryKey: ['collections-history', activePgId] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-summary', activePgId] });
+      setIsPaymentSheetOpen(false);
+    },
+    onError: (err: any) => {
+      toast.error(err.message || 'Failed to record payment');
+    }
+  });
+
   const getStatusBadge = (status: string) => {
     switch (status) {
+      case 'COLLECTED':
       case 'PAID':
         return (
           <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
             <CheckCircle2 className="h-3 w-3" /> Collected
           </span>
         );
+      case 'PARTIALLY_PAID':
+        return (
+          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20">
+            <AlertCircle className="h-3 w-3" /> Partially Paid
+          </span>
+        );
+      case 'OVERDUE':
       case 'PAST_DUE':
         return (
           <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-red-500/10 text-red-400 border border-red-500/20 animate-pulse">
             <AlertCircle className="h-3 w-3" /> Overdue
           </span>
         );
+      case 'DISPUTED':
+        return (
+          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20">
+            <AlertCircle className="h-3 w-3" /> Disputed
+          </span>
+        );
+      case 'WAIVED':
+        return (
+          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-zinc-500/10 text-zinc-400 border border-zinc-500/20">
+            <AlertCircle className="h-3 w-3" /> Waived
+          </span>
+        );
       case 'PENDING':
       default:
         return (
           <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
-            <AlertCircle className="h-3 w-3" /> Pending Collection
+            <AlertCircle className="h-3 w-3" /> Pending
           </span>
         );
     }
@@ -441,11 +522,26 @@ export default function CollectionsHistoryPage() {
                           <th className="p-3.5 text-right">Due Dues</th>
                           <th className="p-3.5 print:hidden">Payment Meta</th>
                           <th className="p-3.5 text-right print:hidden">Reference ID</th>
+                          <th className="p-3.5 text-right print:hidden">Actions</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-zinc-900/60 print:divide-zinc-200">
                         {filteredLedger.map((row: any) => (
-                          <tr key={row.id} className="hover:bg-zinc-900/20 print:hover:bg-transparent">
+                          <tr 
+                            key={row.id} 
+                            onClick={(e) => {
+                              const target = e.target as HTMLElement;
+                              if (target.closest('button') || target.closest('select') || target.closest('input')) {
+                                return;
+                              }
+                              if (row.tenantProfileId) {
+                                openProfile(row.tenantProfileId);
+                              } else {
+                                toast.error('No profile details found for this resident.');
+                              }
+                            }}
+                            className="hover:bg-zinc-900/20 cursor-pointer print:hover:bg-transparent transition-all"
+                          >
                             <td className="p-3.5 font-bold text-zinc-200 print:text-black">
                               <div>
                                 <span>{row.residentName}</span>
@@ -476,9 +572,9 @@ export default function CollectionsHistoryPage() {
                               ₹{row.dueAmount.toLocaleString('en-IN')}
                             </td>
                             <td className="p-3.5 text-zinc-400 text-[10px] print:hidden">
-                              {row.status === 'PAID' ? (
+                              {(row.status === 'COLLECTED' || row.status === 'PAID') ? (
                                 <div>
-                                  <span className="block font-semibold">{row.paymentMode || 'ONLINE'}</span>
+                                  <span className="block font-semibold uppercase">{row.paymentMode || 'ONLINE'}</span>
                                   <span className="block text-zinc-500 text-[9px] mt-0.5">
                                     {row.paymentDate ? new Date(row.paymentDate).toLocaleDateString('en-IN') : '-'}
                                   </span>
@@ -496,6 +592,26 @@ export default function CollectionsHistoryPage() {
                                 {row.referenceId.slice(0, 8)}...
                               </button>
                             </td>
+                            <td className="p-3.5 text-right print:hidden">
+                              {row.status !== 'COLLECTED' && row.status !== 'PAID' && row.status !== 'WAIVED' ? (
+                                <button 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedPaymentRow(row);
+                                    setAmountInput(row.dueAmount.toString());
+                                    setPaymentMethod('upi');
+                                    setReferenceId('');
+                                    setCollectionNotes('');
+                                    setIsPaymentSheetOpen(true);
+                                  }}
+                                  className="px-2.5 py-1 rounded-lg bg-zinc-900 border border-zinc-800 hover:border-primary hover:text-white transition-colors text-[9px] font-black uppercase tracking-wider cursor-pointer"
+                                >
+                                  {row.type === 'SECURITY_DEPOSIT' ? 'Collect Deposit' : row.type === 'DAMAGE_RECOVERY' ? 'Collect Damage Charge' : 'Collect Rent'}
+                                </button>
+                              ) : (
+                                <span className="text-zinc-600 text-[9px] font-bold uppercase tracking-wider">Settled</span>
+                              )}
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -507,6 +623,221 @@ export default function CollectionsHistoryPage() {
           </div>
         </div>
       )}
+
+      {/* 4. Universal Payment Drawer Sheet */}
+      <Sheet open={isPaymentSheetOpen} onOpenChange={(open) => !open && setIsPaymentSheetOpen(false)}>
+        <SheetContent side="bottom" className="sm:max-w-md mx-auto rounded-t-2xl bg-black text-white border-zinc-800 flex flex-col p-6 max-h-[90vh] overflow-y-auto">
+          <SheetHeader>
+            <div className="space-y-0.5">
+              <SheetTitle className="text-xl font-black text-zinc-100">Log Dues Settle</SheetTitle>
+              <SheetDescription className="text-zinc-500 text-xs font-medium">
+                Record collection ledger transaction details.
+              </SheetDescription>
+            </div>
+          </SheetHeader>
+
+          <div className="mt-5 space-y-5">
+            {/* Detailed Resident Context Block */}
+            <div className="bg-zinc-950 border border-zinc-900/80 p-4 rounded-xl space-y-3 shadow-sm select-none">
+              <div className="flex justify-between items-start">
+                <div>
+                  <span className="text-[10px] text-zinc-500 uppercase font-black tracking-widest block">Resident Name</span>
+                  <span className="text-base font-black text-zinc-100 block mt-0.5">{selectedPaymentRow?.residentName || 'N/A'}</span>
+                </div>
+                <div className="text-right">
+                  <span className="text-[10px] text-zinc-500 uppercase font-black tracking-widest block">Room & Bed</span>
+                  <span className="text-xs font-extrabold text-zinc-350 block mt-0.5">
+                    Room {selectedPaymentRow?.roomNumber || 'N/A'} — Bed {selectedPaymentRow?.bedNumber || 'N/A'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4 pt-3.5 border-t border-zinc-900">
+                <div>
+                  <span className="text-[10px] text-zinc-500 uppercase font-black tracking-widest block">Invoice Type</span>
+                  <span className="text-xs font-black text-zinc-300 block mt-0.5 uppercase">
+                    {selectedPaymentRow?.type === 'SECURITY_DEPOSIT' ? 'Deposit' : selectedPaymentRow?.type === 'DAMAGE_RECOVERY' ? 'Damage' : 'Rent'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-zinc-500 uppercase font-black tracking-widest block">Expected Amount</span>
+                  <span className="text-xs font-black text-zinc-300 block mt-0.5">
+                    ₹{((selectedPaymentRow?.amountPaid ?? 0) + (selectedPaymentRow?.dueAmount ?? 0)).toLocaleString('en-IN')}
+                  </span>
+                </div>
+                <div className="text-right">
+                  <span className="text-[10px] text-zinc-500 uppercase font-black tracking-widest block">Already Paid</span>
+                  <span className="text-xs font-black text-green-400 block mt-0.5">
+                    ₹{(selectedPaymentRow?.amountPaid ?? 0).toLocaleString('en-IN')}
+                  </span>
+                </div>
+              </div>
+
+              <div className="pt-2.5 border-t border-zinc-900 flex justify-between items-center text-xs font-semibold">
+                <span className="text-zinc-500 font-bold uppercase tracking-wider text-[9px]">Outstanding Amount</span>
+                <span className="text-red-400 font-black text-sm animate-pulse">
+                  ₹{(selectedPaymentRow?.dueAmount ?? 0).toLocaleString('en-IN')}
+                </span>
+              </div>
+            </div>
+
+            {/* Amount Input */}
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <label className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Amount Received (₹)</label>
+                {amountInput !== selectedPaymentRow?.dueAmount?.toString() && (
+                  <button 
+                    onClick={() => setAmountInput(selectedPaymentRow?.dueAmount?.toString() || '')}
+                    className="text-[11px] text-primary hover:text-primary-light font-bold cursor-pointer"
+                  >
+                    Reset to Full Dues
+                  </button>
+                )}
+              </div>
+              <div className="relative">
+                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500 font-extrabold text-lg">₹</div>
+                <Input
+                  type="number"
+                  value={amountInput}
+                  onChange={(e) => setAmountInput(e.target.value)}
+                  placeholder="0.00"
+                  className="pl-8 h-12 text-lg font-bold bg-zinc-950 border-zinc-900 rounded-xl focus:border-zinc-700 text-white"
+                  max={selectedPaymentRow?.dueAmount}
+                  min={1}
+                  disabled={payMutation.isPending}
+                />
+              </div>
+              {parseFloat(amountInput) < selectedPaymentRow?.dueAmount && parseFloat(amountInput) > 0 && (
+                <p className="text-[11px] text-amber-400 font-semibold flex items-center gap-1.5">
+                  <AlertCircle className="h-3.5 w-3.5 text-amber-500" />
+                  Status: <strong>PARTIALLY PAID</strong>. Outstanding becomes: ₹{(selectedPaymentRow?.dueAmount - parseFloat(amountInput)).toLocaleString('en-IN')}.
+                </p>
+              )}
+              {parseFloat(amountInput) === selectedPaymentRow?.dueAmount && (
+                <p className="text-[11px] text-green-400 font-semibold flex items-center gap-1.5">
+                  <CheckCircle2 className="h-3.5 w-3.5 text-green-400" />
+                  Status: <strong>COLLECTED</strong>. Settle outstanding dues fully.
+                </p>
+              )}
+            </div>
+
+            {/* Payment Method Selector */}
+            <div className="space-y-2">
+              <label className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Payment Method</label>
+              
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod('upi')}
+                  disabled={payMutation.isPending}
+                  className={`flex items-center justify-center gap-2 p-2.5 rounded-xl border-2 transition-all cursor-pointer select-none
+                    ${paymentMethod === 'upi' ? 'border-primary bg-primary/5 text-primary' : 'border-zinc-900 bg-zinc-950/20 text-zinc-400 hover:border-zinc-850'}`}
+                >
+                  <QrCode className="h-4 w-4" />
+                  <span className="text-[10px] font-extrabold uppercase">UPI</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod('cash')}
+                  disabled={payMutation.isPending}
+                  className={`flex items-center justify-center gap-2 p-2.5 rounded-xl border-2 transition-all cursor-pointer select-none
+                    ${paymentMethod === 'cash' ? 'border-primary bg-primary/5 text-primary' : 'border-zinc-900 bg-zinc-950/20 text-zinc-400 hover:border-zinc-850'}`}
+                >
+                  <Banknote className="h-4 w-4" />
+                  <span className="text-[10px] font-extrabold uppercase">Cash</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod('bank_transfer')}
+                  disabled={payMutation.isPending}
+                  className={`flex items-center justify-center gap-2 p-2.5 rounded-xl border-2 transition-all cursor-pointer select-none
+                    ${paymentMethod === 'bank_transfer' ? 'border-primary bg-primary/5 text-primary' : 'border-zinc-900 bg-zinc-950/20 text-zinc-400 hover:border-zinc-850'}`}
+                >
+                  <Building className="h-4 w-4" />
+                  <span className="text-[10px] font-extrabold uppercase">Bank Transfer</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod('cheque')}
+                  disabled={payMutation.isPending}
+                  className={`flex items-center justify-center gap-2 p-2.5 rounded-xl border-2 transition-all cursor-pointer select-none
+                    ${paymentMethod === 'cheque' ? 'border-primary bg-primary/5 text-primary' : 'border-zinc-900 bg-zinc-950/20 text-zinc-400 hover:border-zinc-850'}`}
+                >
+                  <CreditCard className="h-4 w-4" />
+                  <span className="text-[10px] font-extrabold uppercase">Cheque</span>
+                </button>
+              </div>
+
+              {/* Deduct from Deposit option - Only shown for DAMAGE_RECOVERY rows */}
+              {selectedPaymentRow?.type === 'DAMAGE_RECOVERY' && (
+                <div className="pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod('deposit')}
+                    disabled={payMutation.isPending || !(selectedPaymentRow?.refundableDeposit > 0)}
+                    className={`w-full flex items-center justify-center gap-2 p-3 rounded-xl border-2 transition-all cursor-pointer select-none
+                      ${paymentMethod === 'deposit' ? 'border-primary bg-primary/5 text-primary' : 'border-zinc-900 bg-zinc-950/20 text-zinc-400 hover:border-zinc-850'}
+                      ${!(selectedPaymentRow?.refundableDeposit > 0) ? 'opacity-40 cursor-not-allowed border-dashed border-red-500/20' : ''}`}
+                  >
+                    <Wallet className="h-4 w-4" />
+                    <div className="text-left">
+                      <span className="text-[10px] font-extrabold uppercase block">Deduct From Deposit</span>
+                      {selectedPaymentRow?.refundableDeposit > 0 && (
+                        <span className="text-[9px] text-zinc-500 block">Available: ₹{selectedPaymentRow?.refundableDeposit?.toLocaleString('en-IN')}</span>
+                      )}
+                    </div>
+                  </button>
+
+                  {!(selectedPaymentRow?.refundableDeposit > 0) && (
+                    <p className="text-[10px] text-red-400 font-bold mt-1.5 bg-red-500/5 border border-red-500/10 p-2 rounded-lg text-center select-none animate-pulse">
+                      No refundable deposit available.
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Reference ID & Collection Notes */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Reference ID (Optional)</label>
+                <Input
+                  type="text"
+                  value={referenceId}
+                  onChange={(e) => setReferenceId(e.target.value)}
+                  placeholder="TXN182738"
+                  className="h-10 text-xs bg-zinc-950 border-zinc-900 rounded-xl focus:border-zinc-700 text-white"
+                  disabled={payMutation.isPending}
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Collection Notes (Optional)</label>
+                <Input
+                  type="text"
+                  value={collectionNotes}
+                  onChange={(e) => setCollectionNotes(e.target.value)}
+                  placeholder="Special instructions"
+                  className="h-10 text-xs bg-zinc-950 border-zinc-900 rounded-xl focus:border-zinc-700 text-white"
+                  disabled={payMutation.isPending}
+                />
+              </div>
+            </div>
+
+            {/* Settle Confirm Button */}
+            <Button 
+              className="w-full h-11 text-xs font-black uppercase tracking-widest mt-2" 
+              onClick={() => payMutation.mutate()}
+              disabled={payMutation.isPending || !amountInput || parseFloat(amountInput) <= 0 || parseFloat(amountInput) > selectedPaymentRow?.dueAmount}
+            >
+              {payMutation.isPending ? 'Settle in Progress...' : `Confirm Settle of ₹${(parseFloat(amountInput) || 0).toLocaleString('en-IN')} via ${paymentMethod.toUpperCase()}`}
+            </Button>
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

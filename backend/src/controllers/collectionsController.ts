@@ -208,10 +208,31 @@ export const getMonthlyCollectionLedger = async (req: Request, res: Response) =>
       });
     }
 
+    const tenantIds = [
+      ...invoices.map((inv) => inv.pgTenantId),
+      ...recoveries.map((rec) => rec.tenantId)
+    ].filter(Boolean) as string[];
+
+    const depositInvoices = await prisma.rentInvoice.findMany({
+      where: {
+        pgTenantId: { in: tenantIds },
+        type: 'SECURITY_DEPOSIT',
+        status: 'PAID',
+        isActive: true
+      }
+    });
+
     const invoiceEntries = invoices.map((inv) => {
       const profile = inv.tenantProfile;
+      const tenantInvoices = depositInvoices.filter(d => d.pgTenantId === profile.id);
+      const collectedDeposit = tenantInvoices.reduce((sum, d) => sum + d.amount, 0);
+      const totalDeductions = profile?.depositDeductionAmount || 0;
+      const refundedAmount = profile?.depositRefundedAmount || 0;
+      const refundableDeposit = Math.max(0, collectedDeposit - refundedAmount - totalDeductions);
+
       return {
         id: inv.id,
+        tenantProfileId: profile.id,
         residentName: profile.globalTenant.name || 'Unknown',
         roomNumber: profile.room?.number || profile.historicalRoomNumber || '-',
         bedNumber: profile.bed?.bedNumber || profile.historicalBedNumber || '-',
@@ -221,26 +242,48 @@ export const getMonthlyCollectionLedger = async (req: Request, res: Response) =>
         paymentDate: inv.paidAt || null,
         paymentMode: inv.paymentMode || null,
         referenceId: inv.referenceId || inv.id,
-        status: inv.status,
+        status: inv.status === 'PAID' ? 'COLLECTED' : inv.status === 'PAST_DUE' ? 'OVERDUE' : 'PENDING',
         type: inv.type,
+        refundableDeposit,
       };
     });
 
     const recoveryEntries = recoveries.map((rec) => {
       const profile = rec.tenantProfile;
+      const tenantInvoices = depositInvoices.filter(d => d.pgTenantId === profile.id);
+      const collectedDeposit = tenantInvoices.reduce((sum, d) => sum + d.amount, 0);
+      const totalDeductions = profile?.depositDeductionAmount || 0;
+      const refundedAmount = profile?.depositRefundedAmount || 0;
+      const refundableDeposit = Math.max(0, collectedDeposit - refundedAmount - totalDeductions);
+
+      let mappedStatus = rec.status;
+      if (rec.status === 'FULLY_RECOVERED') {
+        mappedStatus = 'COLLECTED';
+      } else if (rec.status === 'PARTIALLY_RECOVERED') {
+        mappedStatus = 'PARTIALLY_PAID';
+      } else if (rec.status === 'PENDING') {
+        mappedStatus = 'PENDING';
+      } else if (rec.status === 'WAIVED') {
+        mappedStatus = 'WAIVED';
+      } else if (rec.status === 'DISPUTED') {
+        mappedStatus = 'DISPUTED';
+      }
+
       return {
         id: rec.id,
+        tenantProfileId: profile.id,
         residentName: profile.globalTenant.name || 'Unknown',
         roomNumber: profile.room?.number || profile.historicalRoomNumber || '-',
         bedNumber: profile.bed?.bedNumber || profile.historicalBedNumber || '-',
         amountPaid: rec.recoveredAmount || 0,
         dueAmount: rec.outstandingAmount || 0,
         dueDate: rec.createdAt,
-        paymentDate: rec.recoveredAt || null,
+        paymentDate: rec.collectedDate || null,
         paymentMode: rec.recoveryMethod || null,
         referenceId: rec.referenceNumber || rec.id,
-        status: rec.status === 'FULLY_RECOVERED' ? 'PAID' : rec.status === 'PENDING' ? 'PENDING' : 'PAST_DUE',
+        status: mappedStatus,
         type: 'DAMAGE_RECOVERY',
+        refundableDeposit,
       };
     });
 

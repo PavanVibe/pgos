@@ -27,6 +27,11 @@ export default function VacateResidentSheet({ pgId }: { pgId: string }) {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const queryClient = useQueryClient();
 
+  // Settlement Bypasses & totals tracking
+  const [isOutstandingBypassed, setIsOutstandingBypassed] = useState(false);
+  const [settledCollectedTotal, setSettledCollectedTotal] = useState(0);
+  const [settledRefundedTotal, setSettledRefundedTotal] = useState(0);
+
   // 1. Fetch live rooms and occupants to extract all active residents
   const { data: roomsResponse } = useQuery({
     queryKey: ['pg-rooms', pgId],
@@ -62,6 +67,9 @@ export default function VacateResidentSheet({ pgId }: { pgId: string }) {
   // 3. Synchronize selected tenant ID and modes from store
   useEffect(() => {
     if (isVacateOpen) {
+      setIsOutstandingBypassed(false);
+      setSettledCollectedTotal(0);
+      setSettledRefundedTotal(0);
       if (selectedTenantId) {
         setLocalTenantId(selectedTenantId);
         setIsSearchActive(false); // Display card immediately
@@ -74,6 +82,9 @@ export default function VacateResidentSheet({ pgId }: { pgId: string }) {
       setSearchQuery('');
       setIsSearchActive(true);
       setIsDropdownOpen(false);
+      setIsOutstandingBypassed(false);
+      setSettledCollectedTotal(0);
+      setSettledRefundedTotal(0);
     }
   }, [selectedTenantId, isVacateOpen]);
 
@@ -126,11 +137,45 @@ export default function VacateResidentSheet({ pgId }: { pgId: string }) {
     : 0;
 
   const outstandingDepositObligations = Math.max(0, expectedDeposit - collectedDeposit);
+  const totalReceivables = outstandingRent + outstandingDepositObligations + outstandingDamage;
 
   const totalDeductions = outstandingRent + outstandingUtilities + outstandingDamage;
 
   const refundableDeposit = Math.max(0, collectedDeposit - totalDeductions);
   const remainingLiability = refundableDeposit === 0 ? Math.abs(collectedDeposit - totalDeductions) : 0;
+
+  // Settle Move-Out Dues & Refunds Mutation
+  const settleMutation = useMutation({
+    mutationFn: (payload: { action: 'COLLECT' | 'REFUND' | 'WAIVE', amount: number, paymentMode: string }) =>
+      fetchApi(`/tenants/pgs/${pgId}/tenants/${localTenantId}/settle-moveout`, {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      }),
+    onSuccess: (res: any, variables) => {
+      toast.success('Settlement transaction processed successfully.');
+      if (variables.action === 'COLLECT') {
+        setSettledCollectedTotal(prev => prev + variables.amount);
+      } else if (variables.action === 'REFUND') {
+        setSettledRefundedTotal(prev => prev + variables.amount);
+      } else if (variables.action === 'WAIVE') {
+        setSettledCollectedTotal(prev => prev + variables.amount);
+      }
+      queryClient.invalidateQueries({ queryKey: ['residents', 'profile', localTenantId] });
+      queryClient.invalidateQueries({ queryKey: ['pg-rooms', pgId] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.summary(pgId) });
+    },
+    onError: (error: any) => {
+      toast.error(error.message || 'Failed to process settlement.');
+    }
+  });
+
+  const handleSettleAction = (action: 'COLLECT' | 'REFUND' | 'WAIVE', amount: number, paymentMode: string) => {
+    if (!pgId || !localTenantId) {
+      toast.error('PG context or resident ID is missing.');
+      return;
+    }
+    settleMutation.mutate({ action, amount, paymentMode });
+  };
 
   // 4. Vacate Resident Mutation (targeted cache patching)
   const vacateMutation = useMutation({
@@ -309,78 +354,214 @@ export default function VacateResidentSheet({ pgId }: { pgId: string }) {
                       Calculating financial vacate dues...
                     </div>
                   ) : (
-                    <div className="space-y-4">
-                      {/* Security Deposit Details Widget */}
-                      <div className="bg-zinc-950 border border-zinc-900 rounded-xl p-4 space-y-3">
-                        <h4 className="text-[10px] font-black uppercase tracking-wider text-zinc-550 flex items-center gap-1.5 border-b border-zinc-900 pb-2">
-                          <ShieldCheck className="h-3.5 w-3.5 text-zinc-500" /> Security Deposit Held
+                    <div className="space-y-5">
+                      {/* Step 1: Financial Settlement Summary */}
+                      <div className="bg-zinc-950 border border-zinc-900 rounded-xl p-4 space-y-4">
+                        <h4 className="text-[10px] font-black uppercase tracking-wider text-zinc-400 flex items-center gap-1.5 border-b border-zinc-900 pb-2">
+                          <Building className="h-3.5 w-3.5 text-zinc-500" /> Resident Financial Settlement
                         </h4>
-                        <div className="flex justify-between items-center text-xs">
-                          <span className="text-zinc-400 font-medium">Expected Deposit</span>
-                          <span className="font-bold text-zinc-350">₹{expectedDeposit.toLocaleString('en-IN')}</span>
-                        </div>
-                        <div className="flex justify-between items-center text-xs">
-                          <span className="text-zinc-400 font-medium">Collected Deposit</span>
-                          <span className="font-black text-white">₹{collectedDeposit.toLocaleString('en-IN')}</span>
-                        </div>
-                        <div className="flex justify-between items-center text-xs pt-1.5 border-t border-zinc-900/60">
-                          <span className="text-zinc-500 font-bold">Outstanding Deposit Obligation</span>
-                          <span className="font-semibold text-zinc-450">₹{outstandingDepositObligations.toLocaleString('en-IN')}</span>
+
+                        <div className="grid grid-cols-2 gap-4">
+                          {/* Amount Resident Owes PG */}
+                          <div className="space-y-2 border-r border-zinc-900 pr-2">
+                            <span className="text-[9px] font-black text-zinc-500 uppercase tracking-widest block">Amount Resident Owes PG</span>
+                            <div className="flex justify-between items-center text-xs">
+                              <span className="text-zinc-400">Rent Due</span>
+                              <span className="font-semibold text-zinc-200">₹{outstandingRent.toLocaleString('en-IN')}</span>
+                            </div>
+                            <div className="flex justify-between items-center text-xs">
+                              <span className="text-zinc-400">Deposit Due</span>
+                              <span className="font-semibold text-zinc-200">₹{outstandingDepositObligations.toLocaleString('en-IN')}</span>
+                            </div>
+                            <div className="flex justify-between items-center text-xs">
+                              <span className="text-zinc-400">Damage Recoveries</span>
+                              <span className="font-semibold text-zinc-200">₹{outstandingDamage.toLocaleString('en-IN')}</span>
+                            </div>
+                            <div className="flex justify-between items-center text-xs pt-1.5 border-t border-zinc-900/60 font-bold">
+                              <span className="text-zinc-300">Receivable</span>
+                              <span className="text-amber-400">₹{totalReceivables.toLocaleString('en-IN')}</span>
+                            </div>
+                          </div>
+
+                          {/* Amount PG Owes Resident */}
+                          <div className="space-y-2 pl-2">
+                            <span className="text-[9px] font-black text-zinc-500 uppercase tracking-widest block">Amount PG Owes Resident</span>
+                            <div className="flex justify-between items-center text-xs">
+                              <span className="text-zinc-400">Refundable Deposit</span>
+                              <span className="font-semibold text-zinc-200">₹{collectedDeposit.toLocaleString('en-IN')}</span>
+                            </div>
+                            <div className="flex justify-between items-center text-xs text-zinc-500 text-[10px] leading-normal pt-1.5 border-t border-zinc-900/60">
+                              <span>(after damage deductions)</span>
+                            </div>
+                          </div>
                         </div>
                       </div>
 
-                      {/* Outstanding Deductions Breakdown Widget */}
-                      <div className="bg-zinc-950 border border-zinc-900 rounded-xl p-4 space-y-3">
-                        <h4 className="text-[10px] font-black uppercase tracking-wider text-zinc-550 flex items-center gap-1.5 border-b border-zinc-900 pb-2">
-                          <Wallet className="h-3.5 w-3.5 text-zinc-500" /> Outstanding Resident Liabilities
+                      {/* Step 2: Settlement Calculation & Net Settlement */}
+                      <div className="bg-zinc-950 border border-zinc-900 rounded-xl p-4 space-y-4">
+                        <h4 className="text-[10px] font-black uppercase tracking-wider text-zinc-400 flex items-center gap-1.5 border-b border-zinc-900 pb-2">
+                          <DollarSign className="h-3.5 w-3.5 text-zinc-500" /> Settlement Calculation
                         </h4>
-                        <div className="flex justify-between items-center text-xs">
-                          <span className="text-zinc-400 font-medium">Rent Due</span>
-                          <span className="font-bold text-amber-500">₹{outstandingRent.toLocaleString('en-IN')}</span>
-                        </div>
-                        <div className="flex justify-between items-center text-xs">
-                          <span className="text-zinc-400 font-medium">Damage Charges</span>
-                          <span className="font-bold text-amber-500">₹{outstandingDamage.toLocaleString('en-IN')}</span>
-                        </div>
-                        {outstandingUtilities > 0 && (
-                          <div className="flex justify-between items-center text-xs">
-                            <span className="text-zinc-400 font-medium">Utility Due</span>
-                            <span className="font-bold text-amber-500">₹{outstandingUtilities.toLocaleString('en-IN')}</span>
+
+                        <div className="space-y-2 text-xs">
+                          <div className="flex justify-between items-center text-zinc-400">
+                            <span>Resident Owes PG (Receivables)</span>
+                            <span className="font-semibold">₹{totalReceivables.toLocaleString('en-IN')}</span>
                           </div>
-                        )}
-                        <div className="flex justify-between items-center text-xs pt-1.5 border-t border-zinc-900/60 font-bold">
-                          <span className="text-zinc-300">Total Deductions</span>
-                          <span className="text-white">₹{totalDeductions.toLocaleString('en-IN')}</span>
-                        </div>
-                      </div>
-
-                      {/* Final Auto Settlement Card */}
-                      <div className="bg-zinc-950/40 border border-zinc-800 p-4 rounded-xl space-y-4 shadow-inner">
-                        <div className="flex justify-between items-center text-sm font-bold">
-                          <span className="text-zinc-300 flex items-center gap-1">
-                            <Sparkles className="h-4 w-4 text-purple-400" /> Final Refundable Deposit
-                          </span>
-                          <span className="text-xl font-black text-green-400">
-                            ₹{refundableDeposit.toLocaleString('en-IN')}
-                          </span>
-                        </div>
-
-                        {remainingLiability > 0 && (
-                          <div className="flex justify-between items-center text-sm font-bold pt-2 border-t border-zinc-900">
-                            <span className="text-zinc-450 flex items-center gap-1">
-                              <ShieldAlert className="h-4 w-4 text-red-500" /> Remaining Tenant Debt
-                            </span>
-                            <span className="text-base font-extrabold text-red-400">
-                              ₹{remainingLiability.toLocaleString('en-IN')}
-                            </span>
+                          <div className="flex justify-between items-center text-zinc-400">
+                            <span>PG Owes Resident (Refundable)</span>
+                            <span className="font-semibold">₹{collectedDeposit.toLocaleString('en-IN')}</span>
                           </div>
+
+                          {/* Net Settlement display */}
+                          {totalReceivables > collectedDeposit && (
+                            <div className="flex justify-between items-center font-bold text-sm pt-2.5 border-t border-zinc-900">
+                              <span className="text-red-400 flex items-center gap-1">
+                                <ShieldAlert className="h-4 w-4 text-red-500" /> Net Due To PG
+                              </span>
+                              <span className="text-lg font-black text-red-400 animate-pulse">
+                                ₹{(totalReceivables - collectedDeposit).toLocaleString('en-IN')}
+                              </span>
+                            </div>
+                          )}
+
+                          {collectedDeposit > totalReceivables && (
+                            <div className="flex justify-between items-center font-bold text-sm pt-2.5 border-t border-zinc-900">
+                              <span className="text-green-400 flex items-center gap-1">
+                                <Sparkles className="h-4 w-4 text-green-400" /> Net Refund To Resident
+                              </span>
+                              <span className="text-lg font-black text-green-400 animate-pulse">
+                                ₹{(collectedDeposit - totalReceivables).toLocaleString('en-IN')}
+                              </span>
+                            </div>
+                          )}
+
+                          {totalReceivables === collectedDeposit && totalReceivables > 0 && (
+                            <div className="flex justify-between items-center font-bold text-sm pt-2.5 border-t border-zinc-900 text-zinc-300">
+                              <span>Net Settlement Dues</span>
+                              <span className="text-lg font-black">₹0</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Step 3: Settlement Actions */}
+                        {settleMutation.isPending ? (
+                          <div className="py-4 flex flex-col items-center justify-center gap-2 text-zinc-500 text-xs">
+                            <div className="h-4 w-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                            <span>Processing settlement transaction...</span>
+                          </div>
+                        ) : (
+                          <>
+                            {/* Option A: Resident owes PG */}
+                            {totalReceivables > collectedDeposit && !isOutstandingBypassed && (
+                              <div className="space-y-2 pt-2 border-t border-dashed border-zinc-900">
+                                <span className="text-[9px] font-black text-zinc-500 uppercase tracking-widest block">Dues Collection Actions</span>
+                                <div className="grid grid-cols-2 gap-2">
+                                  <button
+                                    onClick={() => handleSettleAction('COLLECT', totalReceivables - collectedDeposit, 'cash')}
+                                    className="p-2 rounded-lg bg-zinc-900 border border-zinc-800 text-[10px] font-extrabold uppercase hover:border-primary hover:text-white cursor-pointer select-none"
+                                  >
+                                    Collect Cash
+                                  </button>
+                                  <button
+                                    onClick={() => handleSettleAction('COLLECT', totalReceivables - collectedDeposit, 'upi')}
+                                    className="p-2 rounded-lg bg-zinc-900 border border-zinc-800 text-[10px] font-extrabold uppercase hover:border-primary hover:text-white cursor-pointer select-none"
+                                  >
+                                    Collect UPI
+                                  </button>
+                                  <button
+                                    onClick={() => handleSettleAction('COLLECT', totalReceivables - collectedDeposit, 'bank_transfer')}
+                                    className="p-2 rounded-lg bg-zinc-900 border border-zinc-800 text-[10px] font-extrabold uppercase hover:border-primary hover:text-white cursor-pointer select-none"
+                                  >
+                                    Collect Transfer
+                                  </button>
+                                  <button
+                                    onClick={() => handleSettleAction('WAIVE', totalReceivables - collectedDeposit, 'cash')}
+                                    className="p-2 rounded-lg bg-zinc-900 border border-red-950 text-red-400 hover:bg-red-500/5 text-[10px] font-extrabold uppercase cursor-pointer select-none"
+                                  >
+                                    Waive Dues
+                                  </button>
+                                </div>
+
+                                <div className="pt-2 border-t border-zinc-900 text-center">
+                                  <button
+                                    onClick={() => {
+                                      setIsOutstandingBypassed(true);
+                                      toast.info('Outstanding dues bypassed as active recovery.');
+                                    }}
+                                    className="text-[10px] text-zinc-500 hover:text-zinc-300 font-bold uppercase tracking-wider underline"
+                                  >
+                                    Mark as Outstanding Recovery
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Option B: PG owes Resident */}
+                            {collectedDeposit > totalReceivables && (
+                              <div className="space-y-2 pt-2 border-t border-dashed border-zinc-900">
+                                <span className="text-[9px] font-black text-zinc-500 uppercase tracking-widest block">Refund Processing Actions</span>
+                                <div className="grid grid-cols-3 gap-2">
+                                  <button
+                                    onClick={() => handleSettleAction('REFUND', collectedDeposit - totalReceivables, 'cash')}
+                                    className="p-2 rounded-lg bg-zinc-900 border border-zinc-800 text-[10px] font-extrabold uppercase hover:border-primary hover:text-white cursor-pointer select-none"
+                                  >
+                                    Refund Cash
+                                  </button>
+                                  <button
+                                    onClick={() => handleSettleAction('REFUND', collectedDeposit - totalReceivables, 'upi')}
+                                    className="p-2 rounded-lg bg-zinc-900 border border-zinc-800 text-[10px] font-extrabold uppercase hover:border-primary hover:text-white cursor-pointer select-none"
+                                  >
+                                    Refund UPI
+                                  </button>
+                                  <button
+                                    onClick={() => handleSettleAction('REFUND', collectedDeposit - totalReceivables, 'bank_transfer')}
+                                    className="p-2 rounded-lg bg-zinc-900 border border-zinc-800 text-[10px] font-extrabold uppercase hover:border-primary hover:text-white cursor-pointer select-none"
+                                  >
+                                    Refund Transfer
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </>
                         )}
                       </div>
 
-                      {/* Warning Alert */}
-                      <div className="bg-amber-500/5 text-amber-500 border border-amber-500/20 p-4 rounded-xl text-xs leading-relaxed font-medium">
-                        <strong>Warning:</strong> This action cannot be undone. Once submitted, the resident is finalized, their bed is instantly freed, and sequential deposit deductions are applied inside the ledger.
-                      </div>
+                      {/* Step 5: Final Confirmation block */}
+                      {((totalReceivables === 0 && collectedDeposit === 0) || isOutstandingBypassed) && (
+                        <div className="bg-emerald-500/5 text-emerald-400 border border-emerald-500/20 p-4 rounded-xl space-y-2 select-none animate-in fade-in zoom-in duration-300">
+                          <div className="flex items-center gap-2 font-black text-sm">
+                            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs">✓</span>
+                            Financial Settlement Completed
+                          </div>
+                          <div className="grid grid-cols-3 gap-2 text-[10px] font-bold uppercase tracking-wider text-zinc-400 pt-1">
+                            <div>
+                              <span className="block text-zinc-550 text-[9px]">Collected</span>
+                              <span className="text-zinc-200">₹{settledCollectedTotal.toLocaleString('en-IN')}</span>
+                            </div>
+                            <div className="border-l border-zinc-900 pl-2">
+                              <span className="block text-zinc-550 text-[9px]">Refunded</span>
+                              <span className="text-zinc-200">₹{settledRefundedTotal.toLocaleString('en-IN')}</span>
+                            </div>
+                            <div className="border-l border-zinc-900 pl-2">
+                              <span className="block text-zinc-550 text-[9px]">Outstanding</span>
+                              <span className="text-zinc-200">₹0</span>
+                            </div>
+                          </div>
+                          {isOutstandingBypassed && (
+                            <p className="text-[10px] text-zinc-500 italic mt-1 leading-normal">
+                              Dues bypassed and marked as active recoveries for historical ledger.
+                            </p>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Settlement Action lock warnings */}
+                      {!(totalReceivables === 0 && collectedDeposit === 0) && !isOutstandingBypassed && (
+                        <div className="bg-amber-500/5 text-amber-500 border border-amber-500/20 p-4 rounded-xl text-xs leading-relaxed font-semibold">
+                          <strong>Settlement Locked:</strong> Please settle all financial dues or refunds above, or mark remaining dues outstanding before vacating.
+                        </div>
+                      )}
 
                       {/* Actions */}
                       <div className="pt-4 flex gap-2">
@@ -393,7 +574,12 @@ export default function VacateResidentSheet({ pgId }: { pgId: string }) {
                         >
                           Cancel
                         </Button>
-                        <Button variant="destructive" className="w-1/2 h-11 font-semibold" onClick={handleConfirm} disabled={loading}>
+                        <Button 
+                          variant="destructive" 
+                          className="w-1/2 h-11 font-semibold cursor-pointer" 
+                          onClick={handleConfirm} 
+                          disabled={loading || (!(totalReceivables === 0 && collectedDeposit === 0) && !isOutstandingBypassed)}
+                        >
                           {loading ? 'Processing...' : 'Confirm Vacate'}
                         </Button>
                       </div>
