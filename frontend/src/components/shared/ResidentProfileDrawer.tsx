@@ -939,11 +939,14 @@ Thank you.`;
                                 <span className="text-zinc-500 block text-[8px]">Due Date</span>
                                 <span className="text-zinc-350">{new Date(inv.dueDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
                               </div>
-                                <div className="text-right">
-                                  <span className="text-zinc-500 block text-[8px]">Payment Date</span>
+                              <div className="text-right">
+                                <span className="text-zinc-500 block text-[8px]">Payment Date</span>
+                                {inv.paidAt ? (
                                   <span className="text-zinc-350">{new Date(inv.paidAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
-                                </div>
-                              )}
+                                ) : (
+                                  <span className="text-zinc-500">—</span>
+                                )}
+                              </div>
                             </div>
 
                             {inv.status === 'PAID' && (inv.paymentMode || inv.razorpayPayId || inv.referenceId) && (

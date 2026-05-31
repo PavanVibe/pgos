@@ -58,7 +58,9 @@ interface LedgerRow {
   paymentDate: string | null;
   paymentMode: string | null;
   referenceId: string;
-  status: 'PAID' | 'PENDING' | 'PAST_DUE';
+  status: string;
+  type: string;
+  tenantProfileId?: string;
 }
 
 export default function CollectionsHistoryPage() {
@@ -709,44 +711,45 @@ Thank you.`;
                               </button>
                             </td>
                             <td className="p-3.5 text-right print:hidden">
-                              <div className="flex gap-1.5 justify-end">
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    openPaymentRequest(
-                                      row.type === 'SECURITY_DEPOSIT' ? 'SECURITY_DEPOSIT' : row.type === 'DAMAGE_RECOVERY' ? 'DAMAGE' : 'RENT',
-                                      row.id,
-                                      {
-                                        invoiceNumber: `${row.type === 'SECURITY_DEPOSIT' ? 'DEP' : row.type === 'DAMAGE_RECOVERY' ? 'REC' : 'INV'}-${row.id.substr(0, 8).toUpperCase()}`,
-                                        residentName: row.residentName,
-                                        amount: row.dueAmount,
-                                        dueDate: row.dueDate || new Date()
-                                      }
-                                    );
-                                  }}
-                                  className="px-2 py-1 rounded-lg bg-zinc-950 border border-zinc-900 text-primary hover:border-primary text-[9px] font-black uppercase tracking-wider cursor-pointer transition-all"
-                                >
-                                  Request Pay
-                                </button>
-                                <button 
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setSelectedPaymentRow(row);
-                                    setAmountInput(row.dueAmount.toString());
-                                    setPaymentMethod('upi');
-                                    setReferenceId('');
-                                    setCollectionNotes('');
-                                    setIsPaymentSheetOpen(true);
-                                  }}
-                                  className="px-2 py-1 rounded-lg bg-zinc-900 border border-zinc-800 hover:border-primary hover:text-white transition-colors text-[9px] font-black uppercase tracking-wider cursor-pointer"
-                                >
-                                  Collect
-                                </button>
-                              </div>
-                            ) : (
-                              <span className="text-zinc-650 text-[9px] font-bold uppercase tracking-wider">Settled</span>
-                            )}
+                              {(row.status !== 'PAID' && row.status !== 'COLLECTED') ? (
+                                <div className="flex gap-1.5 justify-end">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      openPaymentRequest(
+                                        row.type === 'SECURITY_DEPOSIT' ? 'SECURITY_DEPOSIT' : row.type === 'DAMAGE_RECOVERY' ? 'DAMAGE' : 'RENT',
+                                        row.id,
+                                        {
+                                          invoiceNumber: `${row.type === 'SECURITY_DEPOSIT' ? 'DEP' : row.type === 'DAMAGE_RECOVERY' ? 'REC' : 'INV'}-${row.id.substr(0, 8).toUpperCase()}`,
+                                          residentName: row.residentName,
+                                          amount: row.dueAmount,
+                                          dueDate: row.dueDate || new Date()
+                                        }
+                                      );
+                                    }}
+                                    className="px-2 py-1 rounded-lg bg-zinc-950 border border-zinc-900 text-primary hover:border-primary text-[9px] font-black uppercase tracking-wider cursor-pointer transition-all"
+                                  >
+                                    Request Pay
+                                  </button>
+                                  <button 
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setSelectedPaymentRow(row);
+                                      setAmountInput(row.dueAmount.toString());
+                                      setPaymentMethod('upi');
+                                      setReferenceId('');
+                                      setCollectionNotes('');
+                                      setIsPaymentSheetOpen(true);
+                                    }}
+                                    className="px-2 py-1 rounded-lg bg-zinc-900 border border-zinc-800 hover:border-primary hover:text-white transition-colors text-[9px] font-black uppercase tracking-wider cursor-pointer"
+                                  >
+                                    Collect
+                                  </button>
+                                </div>
+                              ) : (
+                                <span className="text-zinc-500 text-[9px] font-bold uppercase tracking-wider">Settled</span>
+                              )}
                             </td>
                           </tr>
                         ))}
