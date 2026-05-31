@@ -2,10 +2,12 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Bed, Users, DoorOpen, IndianRupee, Sparkles } from "lucide-react";
+import { Bed, Users, DoorOpen, IndianRupee, Sparkles, ChevronRight } from "lucide-react";
 import { fetchApi } from "@/lib/api";
+import { useOccupancyStore } from "@/store/useOccupancyStore";
 
 export default function VacancyImpactCard({ pgId }: { pgId: string }) {
+  const { openOccupancy } = useOccupancyStore();
   const { data: response, isLoading, isError } = useQuery({
     queryKey: ['vacancy-impact', pgId],
     queryFn: () => fetchApi(`/pgs/${pgId}/operations/vacancy-impact`),
@@ -20,11 +22,20 @@ export default function VacancyImpactCard({ pgId }: { pgId: string }) {
   };
 
   return (
-    <Card className="col-span-1 border border-zinc-900 bg-zinc-950/20 hover:border-zinc-800 transition-all duration-300">
+    <Card 
+      onClick={() => {
+        console.log("[DIAGNOSTIC] Occupancy Summary Card clicked, triggering openOccupancy...");
+        openOccupancy();
+      }}
+      className="col-span-1 border border-zinc-900 bg-zinc-950/20 hover:border-zinc-800 transition-all duration-300 cursor-pointer hover:bg-zinc-950/40 active:scale-[0.99] group select-none"
+    >
       <CardHeader className="pb-3">
         <CardTitle className="text-lg flex items-center gap-2 font-black text-white">
-          <Bed className="h-5 w-5 text-purple-400" />
+          <Bed className="h-5 w-5 text-purple-400 group-hover:animate-pulse" />
           Occupancy Summary
+          <span className="text-[11px] font-semibold text-zinc-550 group-hover:text-zinc-300 transition-colors ml-auto flex items-center gap-0.5">
+            Explore live map <ChevronRight className="h-3 w-3 group-hover:translate-x-0.5 transition-transform" />
+          </span>
         </CardTitle>
       </CardHeader>
       <CardContent>

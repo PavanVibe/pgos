@@ -9,7 +9,7 @@ import { useOnboardingStore } from '@/store/useOnboardingStore';
 import { useVacateStore } from '@/store/useVacateStore';
 import { useRentStore } from '@/store/useRentStore';
 import { fetchApi } from '@/lib/api';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { RoomHistoryDrawer } from './RoomHistoryDrawer';
 import { TrendingUp, ExternalLink } from 'lucide-react';
 import { useResidentProfileStore } from '@/store/useResidentProfileStore';
@@ -73,6 +73,14 @@ export default function OccupancyExplorerSheet({ pgId }: { pgId: string }) {
 
   const [selectedFloor, setSelectedFloor] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
+
+  useEffect(() => {
+    console.log("[DIAGNOSTIC] OccupancyExplorerSheet component mounted for pgId:", pgId);
+  }, [pgId]);
+
+  useEffect(() => {
+    console.log("[DIAGNOSTIC] OccupancyExplorerSheet open state changed. isOccupancyOpen =", isOccupancyOpen);
+  }, [isOccupancyOpen]);
 
   // 1. Fetch live rooms and beds
   const { data: roomsResponse, isLoading, isError } = useQuery({
