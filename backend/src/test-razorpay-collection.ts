@@ -17,6 +17,12 @@ async function main() {
   const bed = await prisma.bed.findFirst({ where: { roomId: room.id } });
   if (!bed) throw new Error("No beds found in room.");
 
+  // Free the selected bed to guarantee it is vacant for the test onboarding
+  await prisma.pGTenantProfile.updateMany({
+    where: { bedId: bed.id },
+    data: { bedId: null, isActive: false }
+  });
+
   const phone = "+919999911223";
   const actorId = 'razorpay_suite_test';
 
