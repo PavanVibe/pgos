@@ -148,6 +148,18 @@ export default function VacateResidentSheet({ pgId }: { pgId: string }) {
   const remainingRefundableDeposit = Math.max(0, collectedDeposit - depositRefunded);
   const remainingRefundableAfterDeductions = Math.max(0, refundableDeposit - depositRefunded);
 
+  const netSettlement = totalReceivables - remainingRefundableDeposit;
+  const isSettlementLocked = Math.abs(netSettlement) > 0;
+
+  console.log('[DIAGNOSTIC] Move-Out Settlement Dues Check:', {
+    rentDue: outstandingRent,
+    depositDue: outstandingDepositObligations,
+    damageRecoveries: outstandingDamage,
+    refundableDeposit: remainingRefundableDeposit,
+    netSettlement: netSettlement,
+    isSettlementLocked: isSettlementLocked
+  });
+
   // Settle Move-Out Dues & Refunds Mutation
   const settleMutation = useMutation({
     mutationFn: (payload: { action: 'COLLECT' | 'REFUND' | 'WAIVE', amount: number, paymentMode: string }) =>
@@ -532,7 +544,7 @@ export default function VacateResidentSheet({ pgId }: { pgId: string }) {
                       </div>
 
                       {/* Step 5: Final Confirmation block */}
-                      {((totalReceivables === 0 && remainingRefundableDeposit === 0) || isOutstandingBypassed) && (
+                      {(!isSettlementLocked || isOutstandingBypassed) && (
                         <div className="bg-emerald-500/5 text-emerald-400 border border-emerald-500/20 p-4 rounded-xl space-y-2 select-none animate-in fade-in zoom-in duration-300">
                           <div className="flex items-center gap-2 font-black text-sm">
                             <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs">✓</span>
@@ -561,7 +573,7 @@ export default function VacateResidentSheet({ pgId }: { pgId: string }) {
                       )}
 
                       {/* Settlement Action lock warnings */}
-                      {!(totalReceivables === 0 && remainingRefundableDeposit === 0) && !isOutstandingBypassed && (
+                      {isSettlementLocked && !isOutstandingBypassed && (
                         <div className="bg-amber-500/5 text-amber-500 border border-amber-500/20 p-4 rounded-xl text-xs leading-relaxed font-semibold">
                           <strong>Settlement Locked:</strong> Please settle all financial dues or refunds above, or mark remaining dues outstanding before vacating.
                         </div>
@@ -582,7 +594,7 @@ export default function VacateResidentSheet({ pgId }: { pgId: string }) {
                           variant="destructive" 
                           className="w-1/2 h-11 font-semibold cursor-pointer" 
                           onClick={handleConfirm} 
-                          disabled={loading || (!(totalReceivables === 0 && remainingRefundableDeposit === 0) && !isOutstandingBypassed)}
+                          disabled={loading || (isSettlementLocked && !isOutstandingBypassed)}
                         >
                           {loading ? 'Processing...' : 'Confirm Vacate'}
                         </Button>
