@@ -29,6 +29,17 @@ import {
 import dashboardRoutes from './dashboardRoutes';
 import { getDashboardSummary } from '../controllers/dashboardController';
 import { getUploadSignature, getSignedDocumentUrl } from '../controllers/uploadController';
+import { addExpense, getExpensesTimeline } from '../controllers/expensesController';
+import { getProfitSummary } from '../controllers/profitController';
+import { 
+  getVacancyImpact, 
+  getFollowUps, 
+  getCleaningChecklist, 
+  toggleCleaningChecklist, 
+  resetCleaningChecklist, 
+  getOperationsSummary 
+} from '../controllers/operationsController';
+import { addStaff, getStaffList, deactivateStaff, payStaffSalary, getStaffDetails } from '../controllers/staffController';
 import { requireAuth, attachOrgContext } from '../middlewares/authMiddleware';
 import { canAccessOrganization, canAccessPG, auditAction } from '../middlewares/rbacMiddleware';
 
@@ -84,6 +95,24 @@ router.post(
   auditAction('ALLOCATE_BED', 'PGTenantProfile'),
   allocateBedController
 );
+
+// Sprint 1 Operational Mappings
+router.post('/:pgId/expenses', canAccessPG, addExpense);
+router.get('/:pgId/expenses/timeline', canAccessPG, getExpensesTimeline);
+router.get('/:pgId/profit/summary', canAccessPG, getProfitSummary);
+router.get('/:pgId/operations/vacancy-impact', canAccessPG, getVacancyImpact);
+router.get('/:pgId/operations/follow-ups', canAccessPG, getFollowUps);
+router.get('/:pgId/cleaning/checklist', canAccessPG, getCleaningChecklist);
+router.post('/:pgId/cleaning/checklist/toggle', canAccessPG, toggleCleaningChecklist);
+router.post('/:pgId/cleaning/checklist/reset', canAccessPG, resetCleaningChecklist);
+router.get('/:pgId/operations/summary', canAccessPG, getOperationsSummary);
+
+// Sprint 2 Staff Mappings
+router.get('/:pgId/staff', canAccessPG, getStaffList);
+router.post('/:pgId/staff', canAccessPG, addStaff);
+router.post('/:pgId/staff/:staffId/pay-salary', canAccessPG, payStaffSalary);
+router.post('/:pgId/staff/:staffId/deactivate', canAccessPG, deactivateStaff);
+router.get('/:pgId/staff/:staffId', canAccessPG, getStaffDetails);
 
 
 export default router;

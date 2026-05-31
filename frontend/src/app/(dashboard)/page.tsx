@@ -8,9 +8,12 @@ import ActivityFeed from "@/components/dashboard/ActivityFeed";
 import QuickActions from "@/components/dashboard/QuickActions";
 import TodaysTasksPanel from "@/components/dashboard/TodaysTasksPanel";
 import PendingCollectionsCard from "@/components/dashboard/PendingCollectionsCard";
-import MonthlyCollectionCard from "@/components/dashboard/MonthlyCollectionCard";
+import ProfitSummaryCard from "@/components/dashboard/ProfitSummaryCard";
 import SecurityDepositsCard from "@/components/dashboard/SecurityDepositsCard";
-import OccupancySummaryCard from "@/components/dashboard/OccupancySummaryCard";
+import FollowUpCard from "@/components/dashboard/FollowUpCard";
+import TodaysOperationsCard from "@/components/dashboard/TodaysOperationsCard";
+import CleaningChecklistCard from "@/components/dashboard/CleaningChecklistCard";
+import VacancyImpactCard from "@/components/dashboard/VacancyImpactCard";
 import OnboardingSheet from "@/components/onboarding/OnboardingSheet";
 import MarkPaidSheet from "@/components/rent/MarkPaidSheet";
 import OverdueResidentSheet from "@/components/rent/OverdueResidentSheet";
@@ -104,14 +107,17 @@ export default function DashboardPage() {
         <>
           <QuickActions pgId={activePgId} />
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2">
+            <div className="lg:col-span-2 space-y-6">
+              <TodaysOperationsCard pgId={activePgId} />
               <TodaysTasksPanel pgId={activePgId} />
+              <CleaningChecklistCard pgId={activePgId} />
             </div>
             <div className="space-y-6">
-              <MonthlyCollectionCard pgId={activePgId} />
+              <ProfitSummaryCard pgId={activePgId} />
+              <FollowUpCard pgId={activePgId} />
               <PendingCollectionsCard pgId={activePgId} />
               <SecurityDepositsCard pgId={activePgId} />
-              <OccupancySummaryCard pgId={activePgId} />
+              <VacancyImpactCard pgId={activePgId} />
               <ActivityFeed pgId={activePgId} />
             </div>
           </div>

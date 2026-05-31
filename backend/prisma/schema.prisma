@@ -80,6 +80,9 @@ model PG {
   complaints     Complaint[]
   tenantProfiles PGTenantProfile[]
   damageRecoveries DamageRecovery[]
+  staff          Staff[]
+  cleaningChecklist CleaningChecklist?
+  monthlyBusinessSnapshots MonthlyBusinessSnapshot[]
 
   @@index([organizationId])
   @@index([isActive])
@@ -224,6 +227,8 @@ model Expense {
   amount     Float
   incurredAt DateTime @default(now())
   receiptUrl String?
+  title      String   @default("Expense")
+  notes      String?
   
   createdBy  String?
   updatedBy  String?
@@ -273,23 +278,31 @@ model Complaint {
 }
 
 model Staff {
-  id             String       @id @default(uuid())
+  id             String               @id @default(uuid())
   organizationId String
-  clerkUserId    String?      @unique
+  pgId           String?
+  clerkUserId    String?              @unique
   name           String
   phone          String
-  role           StaffRole    @default(MANAGER)
+  role           String               @default("CARETAKER")
+  monthlySalary  Float                @default(0)
+  joiningDate    DateTime             @default(now())
+  status         String               @default("ACTIVE")
   
   createdBy      String?
   updatedBy      String?
-  isActive       Boolean      @default(true)
+  isActive       Boolean              @default(true)
   deletedAt      DateTime?
 
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
-  organization   Organization @relation(fields: [organizationId], references: [id])
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  
+  organization   Organization         @relation(fields: [organizationId], references: [id])
+  pg             PG?                  @relation(fields: [pgId], references: [id])
+  salaryPayments StaffSalaryPayment[]
 
   @@index([organizationId])
+  @@index([pgId])
 }
 
 model EventLog {
@@ -418,4 +431,51 @@ model RecoveryTransaction {
   createdBy       String?
 
   recovery        DamageRecovery @relation(fields: [recoveryId], references: [id], onDelete: Cascade)
+}
+
+model StaffSalaryPayment {
+  id          String   @id @default(uuid())
+  staffId     String
+  amount      Float
+  paymentDate DateTime @default(now())
+  salaryMonth String
+  notes       String?
+  createdAt   DateTime @default(now())
+  
+  staff       Staff    @relation(fields: [staffId], references: [id], onDelete: Cascade)
+
+  @@index([staffId])
+}
+
+model CleaningChecklist {
+  id                  String   @id @default(uuid())
+  pgId                String   @unique
+  roomsCompleted      Boolean  @default(false)
+  bathroomsCompleted  Boolean  @default(false)
+  commonAreasCompleted Boolean  @default(false)
+  kitchenCompleted    Boolean  @default(false)
+  waterTankCompleted  Boolean  @default(false)
+  updatedAt           DateTime @updatedAt
+  
+  pg                  PG       @relation(fields: [pgId], references: [id], onDelete: Cascade)
+}
+
+model MonthlyBusinessSnapshot {
+  id                String   @id @default(uuid())
+  pgId              String
+  month             Int
+  year              Int
+  occupancyPercent  Float
+  revenue           Float
+  expenses          Float
+  profit            Float
+  rentCollected     Float
+  damageRecoveries  Float
+  depositsCollected Float
+  createdAt         DateTime @default(now())
+
+  pg                PG       @relation(fields: [pgId], references: [id], onDelete: Cascade)
+
+  @@unique([pgId, month, year])
+  @@index([pgId])
 }

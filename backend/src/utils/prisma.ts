@@ -19,7 +19,10 @@ const prisma = basePrisma.$extends({
           model !== 'DamageRecovery' && 
           model !== 'DamageRecoveryItem' &&
           model !== 'DepositLedgerTransaction' &&
-          model !== 'RecoveryTransaction'
+          model !== 'RecoveryTransaction' &&
+          model !== 'StaffSalaryPayment' &&
+          model !== 'CleaningChecklist' &&
+          model !== 'MonthlyBusinessSnapshot'
         ) {
           args.where = { isActive: true, ...args.where };
         }
@@ -33,7 +36,10 @@ const prisma = basePrisma.$extends({
           model !== 'DamageRecovery' && 
           model !== 'DamageRecoveryItem' &&
           model !== 'DepositLedgerTransaction' &&
-          model !== 'RecoveryTransaction'
+          model !== 'RecoveryTransaction' &&
+          model !== 'StaffSalaryPayment' &&
+          model !== 'CleaningChecklist' &&
+          model !== 'MonthlyBusinessSnapshot'
         ) {
           args.where = { isActive: true, ...args.where };
         }
@@ -47,7 +53,10 @@ const prisma = basePrisma.$extends({
           model !== 'DamageRecovery' && 
           model !== 'DamageRecoveryItem' &&
           model !== 'DepositLedgerTransaction' &&
-          model !== 'RecoveryTransaction'
+          model !== 'RecoveryTransaction' &&
+          model !== 'StaffSalaryPayment' &&
+          model !== 'CleaningChecklist' &&
+          model !== 'MonthlyBusinessSnapshot'
         ) {
           args.where = { isActive: true, ...args.where };
         }
