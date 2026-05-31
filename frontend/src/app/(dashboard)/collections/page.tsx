@@ -24,7 +24,8 @@ import {
   Banknote,
   Building,
   CreditCard,
-  Wallet
+  Wallet,
+  MessageCircle
 } from 'lucide-react';
 import Link from 'next/link';
 import { toast } from 'sonner';
@@ -729,9 +730,10 @@ Thank you.`;
                                         }
                                       );
                                     }}
-                                    className="px-2 py-1 rounded-lg bg-zinc-950 border border-zinc-900 text-primary hover:border-primary text-[9px] font-black uppercase tracking-wider cursor-pointer transition-all"
+                                    className="h-[40px] min-w-[140px] px-3.5 rounded-xl bg-emerald-600 text-white hover:bg-emerald-500 text-[10px] font-black uppercase tracking-wider flex items-center justify-center cursor-pointer transition-all shadow-md active:scale-[0.98]"
                                   >
-                                    Request Pay
+                                    <MessageCircle className="h-3.5 w-3.5 mr-1.5 stroke-[2.5]" />
+                                    Request Payment
                                   </button>
                                   <button 
                                     onClick={(e) => {
@@ -743,9 +745,10 @@ Thank you.`;
                                       setCollectionNotes('');
                                       setIsPaymentSheetOpen(true);
                                     }}
-                                    className="px-2 py-1 rounded-lg bg-zinc-900 border border-zinc-800 hover:border-primary hover:text-white transition-colors text-[9px] font-black uppercase tracking-wider cursor-pointer"
+                                    className="h-[40px] min-w-[140px] px-3.5 rounded-xl bg-blue-600 text-white hover:bg-blue-500 text-[10px] font-black uppercase tracking-wider flex items-center justify-center cursor-pointer transition-all shadow-md active:scale-[0.98]"
                                   >
-                                    Collect
+                                    <Banknote className="h-3.5 w-3.5 mr-1.5 stroke-[2.5]" />
+                                    Collect Payment
                                   </button>
                                 </div>
                               ) : (
