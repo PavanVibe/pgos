@@ -492,8 +492,12 @@ model PaymentLink {
   referenceId           String          @unique
   razorpayPaymentLinkId String?         @unique
   paymentUrl            String?
-  status                String          @default("unpaid") // unpaid, paid, expired, cancelled
+  status                String          @default("ACTIVE") // ACTIVE, PARTIALLY_PAID, PAID, EXPIRED, CANCELLED, FAILED
   amount                Float
+  
+  expiresAt             DateTime?
+  createdBy             String?
+  residentId            String?
   
   invoiceId             String?
   rentInvoice           RentInvoice?    @relation(fields: [invoiceId], references: [id], onDelete: Cascade)

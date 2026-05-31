@@ -77,7 +77,7 @@ async function main() {
   
   // 1. Generate Payment Link for Rent
   console.log("Waiting for auto-generated payment links to persist...");
-  await new Promise(resolve => setTimeout(resolve, 1000));
+  await new Promise(resolve => setTimeout(resolve, 2000));
   const rentLink1 = await prisma.paymentLink.findFirst({
     where: { invoiceId: rentInvoice.id }
   });
@@ -208,7 +208,7 @@ async function main() {
   });
 
   console.log("Waiting for auto-generated damage recovery link to persist...");
-  await new Promise(resolve => setTimeout(resolve, 1000));
+  await new Promise(resolve => setTimeout(resolve, 2000));
   const recLink = await prisma.paymentLink.findFirst({
     where: { recoveryId: recovery.id }
   });

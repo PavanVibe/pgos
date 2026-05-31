@@ -4,11 +4,44 @@ import prisma from '../utils/prisma';
 
 export const generateLink = async (req: Request, res: Response) => {
   try {
-    const { type, id, amount } = req.body;
+    const { type, id, amount, frontendUrl, forceRegenerate } = req.body;
     const actorId = (req as any).auth?.userId || 'system';
 
     if (!type || !id) {
       return res.status(400).json({ error: 'type and id are required.' });
+    }
+
+    // Trace and reuse existing active link if available (and not expired) to prevent multiple duplicate active links
+    if (!forceRegenerate) {
+      const existing = await prisma.paymentLink.findFirst({
+        where: {
+          invoiceId: type === 'RENT' || type === 'SECURITY_DEPOSIT' ? id : undefined,
+          recoveryId: type === 'DAMAGE' ? id : undefined,
+          status: { in: ['ACTIVE', 'PARTIALLY_PAID'] }
+        }
+      });
+
+      if (existing) {
+        // Expiry check
+        if (existing.expiresAt && new Date() > existing.expiresAt) {
+          await prisma.paymentLink.update({
+            where: { id: existing.id },
+            data: { status: 'EXPIRED' }
+          });
+        } else {
+          return res.status(200).json({ status: 'success', data: existing });
+        }
+      }
+    } else {
+      // Mark any existing active links as CANCELLED for full audit trace
+      await prisma.paymentLink.updateMany({
+        where: {
+          invoiceId: type === 'RENT' || type === 'SECURITY_DEPOSIT' ? id : undefined,
+          recoveryId: type === 'DAMAGE' ? id : undefined,
+          status: { in: ['ACTIVE', 'PARTIALLY_PAID'] }
+        },
+        data: { status: 'CANCELLED' }
+      });
     }
 
     let targetAmount = amount;
@@ -58,10 +91,90 @@ export const generateLink = async (req: Request, res: Response) => {
       residentName,
       phone,
       email,
-      pgId
+      pgId,
+      frontendUrl,
+      actorId
     );
 
     res.status(200).json({ status: 'success', data: savedLink });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const getLinkDetails = async (req: Request, res: Response) => {
+  try {
+    const referenceId = req.params.referenceId as string;
+    
+    const link = (await prisma.paymentLink.findUnique({
+      where: { referenceId },
+      include: {
+        rentInvoice: { include: { tenantProfile: { include: { globalTenant: true } } } },
+        damageRecovery: { include: { tenantProfile: { include: { globalTenant: true } } } }
+      }
+    })) as any;
+    
+    if (!link) {
+      return res.status(404).json({ error: 'Payment link not found.' });
+    }
+    
+    // Check if associated invoice or damage recovery is already settled/paid
+    let isSettled = false;
+    let currentStatus = link.status;
+    let residentName = 'Resident';
+    let typeLabel = 'Outstanding Balance';
+    let invoiceNumber = '';
+    
+    if (link.invoiceId && link.rentInvoice) {
+      isSettled = link.rentInvoice.status === 'PAID';
+      residentName = link.rentInvoice.tenantProfile.globalTenant.name || 'Resident';
+      typeLabel = link.rentInvoice.type === 'SECURITY_DEPOSIT' ? 'Deposit Due' : 'Rent Due';
+      invoiceNumber = `INV-${link.rentInvoice.id.substr(0, 8).toUpperCase()}`;
+    } else if (link.recoveryId && link.damageRecovery) {
+      isSettled = link.damageRecovery.status === 'FULLY_RECOVERED';
+      residentName = link.damageRecovery.tenantProfile.globalTenant.name || 'Resident';
+      typeLabel = 'Damage Charges';
+      invoiceNumber = `REC-${link.damageRecovery.id.substr(0, 8).toUpperCase()}`;
+    }
+    
+    if (isSettled) {
+      currentStatus = 'PAID';
+      if (link.status !== 'PAID') {
+        await prisma.paymentLink.update({
+          where: { id: link.id },
+          data: { status: 'PAID' }
+        });
+      }
+    } else {
+      // Check for Expiration
+      if (link.expiresAt && new Date() > link.expiresAt) {
+        currentStatus = 'EXPIRED';
+        if (link.status !== 'EXPIRED') {
+          await prisma.paymentLink.update({
+            where: { id: link.id },
+            data: { status: 'EXPIRED' }
+          });
+        }
+      }
+    }
+    
+    res.status(200).json({
+      status: 'success',
+      data: {
+        referenceId: link.referenceId,
+        razorpayPaymentLinkId: link.razorpayPaymentLinkId,
+        paymentUrl: link.paymentUrl,
+        amount: link.amount,
+        status: currentStatus,
+        expiresAt: link.expiresAt,
+        residentName,
+        typeLabel,
+        invoiceNumber,
+        isSettled,
+        isExpired: currentStatus === 'EXPIRED',
+        invoiceId: link.invoiceId || link.recoveryId
+      }
+    });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }

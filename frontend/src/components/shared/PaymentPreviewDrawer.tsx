@@ -61,7 +61,8 @@ export default function PaymentPreviewDrawer() {
         body: JSON.stringify({
           type: paymentRequestType,
           id: paymentRequestTargetId,
-          amount: amount
+          amount: amount,
+          frontendUrl: window.location.origin
         })
       });
 
@@ -104,6 +105,13 @@ export default function PaymentPreviewDrawer() {
     toast.success('WhatsApp payment request link opened directly.');
   };
 
+  const handleVerifyLink = async () => {
+    const link = await getOrGeneratePaymentLink();
+    if (!link) return;
+    window.open(link.paymentUrl, '_blank');
+    toast.success('Opened payment verification page in a new tab.');
+  };
+
   const handleShowQR = async () => {
     const link = await getOrGeneratePaymentLink();
     if (!link) return;
@@ -130,7 +138,8 @@ export default function PaymentPreviewDrawer() {
           type: paymentRequestType,
           id: paymentRequestTargetId,
           amount: amount,
-          forceRegenerate: true
+          forceRegenerate: true,
+          frontendUrl: window.location.origin
         })
       });
 
@@ -231,8 +240,8 @@ export default function PaymentPreviewDrawer() {
               </div>
               <div className="flex justify-between items-center py-1 border-b border-zinc-900/60">
                 <span className="text-zinc-500">Payment Status:</span>
-                <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${generatedLink ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>
-                  {generatedLink ? 'PAYMENT_LINK_SENT' : 'UNPAID'}
+                <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${generatedLink ? 'bg-emerald-500/10 text-emerald-450 border border-emerald-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>
+                  {generatedLink ? 'ACTIVE' : 'UNPAID'}
                 </span>
               </div>
               <div className="flex justify-between items-center py-1 border-b border-zinc-900/60">
@@ -242,6 +251,17 @@ export default function PaymentPreviewDrawer() {
               <div className="flex justify-between items-center py-1">
                 <span className="text-zinc-500">Expiry Time (7 Days):</span>
                 <span className="text-zinc-355 font-semibold">{new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
+              </div>
+            </div>
+
+            {/* WhatsApp Message Verification & Preview Card */}
+            <div className="bg-zinc-950/60 border border-zinc-900 rounded-2xl p-4 space-y-3">
+              <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest block">WhatsApp Message Verification</span>
+              <div className="bg-zinc-900/40 rounded-xl p-3 border border-zinc-850 font-mono text-[10px] text-zinc-350 leading-relaxed whitespace-pre-wrap select-text max-h-[140px] overflow-y-auto">
+                {`Hi ${residentName},\n\nYour payment is due.\n\nType: ${getDuesLabel()}\nAmount: ₹${amount.toLocaleString('en-IN')}\n\nPay securely here:\n${generatedLink ? generatedLink.paymentUrl : 'Click [Send Payment Request] to generate link'}\n\nThank you.`}
+              </div>
+              <div className="text-[9px] text-zinc-500 italic">
+                * Confirm the amount and tenant details above before opening WhatsApp.
               </div>
             </div>
 
@@ -262,18 +282,18 @@ export default function PaymentPreviewDrawer() {
                 Send Payment Request
               </Button>
 
-              <div className="grid grid-cols-3 gap-2 text-[10px]">
+              <div className="grid grid-cols-2 gap-2 text-[10px]">
                 <button
                   onClick={handleShowQR}
                   disabled={loading}
-                  className="flex flex-col items-center justify-center gap-1.5 p-3 rounded-xl bg-zinc-900 border border-zinc-850 hover:border-zinc-700 hover:text-white font-bold cursor-pointer transition-all disabled:opacity-50"
+                  className="flex items-center justify-center gap-2 p-3.5 rounded-xl bg-zinc-900 border border-zinc-850 hover:border-zinc-700 hover:text-white font-bold cursor-pointer transition-all disabled:opacity-50"
                 >
                   <QrCode className="h-4 w-4 text-primary" /> Generate QR
                 </button>
                 <button
                   onClick={handleCopyLink}
                   disabled={loading}
-                  className="flex flex-col items-center justify-center gap-1.5 p-3 rounded-xl bg-zinc-900 border border-zinc-850 hover:border-zinc-700 hover:text-white font-bold cursor-pointer transition-all disabled:opacity-50"
+                  className="flex items-center justify-center gap-2 p-3.5 rounded-xl bg-zinc-900 border border-zinc-850 hover:border-zinc-700 hover:text-white font-bold cursor-pointer transition-all disabled:opacity-50"
                 >
                   {copied ? (
                     <>
@@ -286,11 +306,18 @@ export default function PaymentPreviewDrawer() {
                   )}
                 </button>
                 <button
+                  onClick={handleVerifyLink}
+                  disabled={loading}
+                  className="flex items-center justify-center gap-2 p-3.5 rounded-xl bg-zinc-900 border border-zinc-850 hover:border-zinc-700 hover:text-white font-bold cursor-pointer transition-all disabled:opacity-50"
+                >
+                  <CreditCard className="h-4 w-4 text-emerald-400 animate-pulse" /> Verify Link
+                </button>
+                <button
                   onClick={handleRegenerateLink}
                   disabled={loading}
-                  className="flex flex-col items-center justify-center gap-1.5 p-3 rounded-xl bg-zinc-900 border border-zinc-850 hover:border-zinc-700 hover:text-white font-bold cursor-pointer transition-all disabled:opacity-50"
+                  className="flex items-center justify-center gap-2 p-3.5 rounded-xl bg-zinc-900 border border-zinc-850 hover:border-zinc-700 hover:text-white font-bold cursor-pointer transition-all disabled:opacity-50"
                 >
-                  <Sparkles className="h-4 w-4 text-amber-400" /> Regenerate
+                  <Sparkles className="h-4 w-4 text-amber-400" /> Regenerate Link
                 </button>
               </div>
             </div>

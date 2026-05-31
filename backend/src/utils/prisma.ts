@@ -50,7 +50,7 @@ const prisma = basePrisma.$extends({
           } catch (err: any) {
             console.error('[AUTO PAYMENT LINK ERROR]:', err.stack || err.message || err);
           }
-        }, 50);
+        }, 1000);
         return result;
       }
     },
@@ -93,7 +93,7 @@ const prisma = basePrisma.$extends({
           } catch (err: any) {
             console.error('[AUTO PAYMENT LINK ERROR FOR DAMAGE]:', err.message);
           }
-        }, 50);
+        }, 1000);
         return result;
       }
     },

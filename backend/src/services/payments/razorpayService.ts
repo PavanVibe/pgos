@@ -22,8 +22,14 @@ export class RazorpayService {
     residentName: string,
     phone: string,
     email: string,
-    pgId: string
+    pgId: string,
+    frontendUrl?: string,
+    createdBy?: string
   ) {
+    const isProd = process.env.NODE_ENV === 'production' && process.env.PAYMENT_MODE !== 'test';
+    const appUrl = frontendUrl || process.env.FRONTEND_URL || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days valid
+
     const referenceId = `ref_${type.toLowerCase()}_${id}_${Date.now()}`;
     const amountInPaise = Math.round(amount * 100);
 
@@ -56,22 +62,38 @@ export class RazorpayService {
         });
 
         const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Razorpay API request timed out')), 250)
+          setTimeout(() => reject(new Error('Razorpay API request timed out')), 5000)
         );
 
         const link = await Promise.race([createPromise, timeoutPromise]) as any;
         paymentUrl = link.short_url;
         razorpayPaymentLinkId = link.id;
       } catch (err: any) {
-        console.error('[RAZORPAY SERVICE ERROR] Live Link Failed, falling back to simulator:', err.message);
+        console.error('[RAZORPAY SERVICE ERROR] Live Link Failed:', err.message);
+        if (isProd) {
+          throw new Error('Unable to generate payment link. Please retry in a few moments.');
+        }
         // Fall back to simulator
-        paymentUrl = `http://localhost:3000/pay-simulate?referenceId=${referenceId}&amount=${amount}`;
+        paymentUrl = `${appUrl}/pay?referenceId=${referenceId}&amount=${amount}`;
         razorpayPaymentLinkId = `plink_mock_${Math.random().toString(36).substr(2, 9)}`;
       }
     } else {
+      if (isProd) {
+        throw new Error('Unable to generate payment link. Please retry in a few moments.');
+      }
       // Offline Simulation Mode
-      paymentUrl = `http://localhost:3000/pay-simulate?referenceId=${referenceId}&amount=${amount}`;
+      paymentUrl = `${appUrl}/pay?referenceId=${referenceId}&amount=${amount}`;
       razorpayPaymentLinkId = `plink_mock_${Math.random().toString(36).substr(2, 9)}`;
+    }
+
+    // Resolve ResidentId (tenantProfileId) dynamically
+    let residentId = '';
+    if (type === 'RENT' || type === 'SECURITY_DEPOSIT') {
+      const inv = await prisma.rentInvoice.findUnique({ where: { id } });
+      if (inv) residentId = inv.pgTenantId;
+    } else if (type === 'DAMAGE') {
+      const rec = await prisma.damageRecovery.findUnique({ where: { id } });
+      if (rec) residentId = rec.tenantId;
     }
 
     // Save PaymentLink record to DB
@@ -81,6 +103,10 @@ export class RazorpayService {
         razorpayPaymentLinkId,
         paymentUrl,
         amount,
+        status: 'ACTIVE',
+        expiresAt,
+        createdBy: createdBy || 'system',
+        residentId: residentId || undefined,
         invoiceId: type === 'RENT' || type === 'SECURITY_DEPOSIT' ? id : undefined,
         recoveryId: type === 'DAMAGE' ? id : undefined,
       }
@@ -153,16 +179,11 @@ export class RazorpayService {
         throw new Error(`PaymentLink with referenceId ${referenceId} not found in database.`);
       }
 
-      // Update link status
-      await tx.paymentLink.update({
-        where: { id: link.id },
-        data: { status: 'paid' }
-      });
-
       let tenantProfileId = '';
       let residentName = '';
       let receiptNumber = `RCP-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
       let invoiceNumberStr = '';
+      let resolvedStatus = 'PAID';
 
       if (link.invoiceId && link.rentInvoice) {
         const inv = link.rentInvoice;
@@ -172,6 +193,7 @@ export class RazorpayService {
 
         const nextPaidAmt = inv.paidAmount + amountPaid;
         const nextStatus = nextPaidAmt >= inv.amount ? InvoiceStatus.PAID : InvoiceStatus.PARTIALLY_PAID;
+        resolvedStatus = nextStatus === InvoiceStatus.PAID ? 'PAID' : 'PARTIALLY_PAID';
 
         // Update single invoice without splits or clones
         await tx.rentInvoice.update({
@@ -229,6 +251,7 @@ export class RazorpayService {
         const nextRecovered = recovery.recoveredAmount + amountPaid;
         const nextOutstanding = Math.max(0, recovery.totalAmount - nextRecovered);
         const nextStatus = nextOutstanding === 0 ? 'FULLY_RECOVERED' : 'PARTIALLY_RECOVERED';
+        resolvedStatus = nextOutstanding === 0 ? 'PAID' : 'PARTIALLY_PAID';
 
         await tx.damageRecovery.update({
           where: { id: recovery.id },
@@ -255,6 +278,12 @@ export class RazorpayService {
           }
         });
       }
+
+      // Update the payment link status in database
+      await tx.paymentLink.update({
+        where: { id: link.id },
+        data: { status: resolvedStatus }
+      });
 
       // Create permanent PaymentReceipt
       const receipt = await tx.paymentReceipt.create({
