@@ -2,6 +2,8 @@
 
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { useResidentProfileStore } from '@/store/useResidentProfileStore';
+import { usePaymentRequestStore } from '@/store/usePaymentRequestStore';
+import { downloadReceiptPDF } from '@/components/shared/PaymentReceiptPDF';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { fetchApi } from '@/lib/api';
 import { 
@@ -14,6 +16,7 @@ import { toast } from 'sonner';
 
 export default function ResidentProfileDrawer() {
   const { isOpen, selectedProfileId, closeProfile } = useResidentProfileStore();
+  const { openPaymentRequest } = usePaymentRequestStore();
   const [fullscreenImage, setFullscreenImage] = useState<string | null>(null);
 
   const friendlyStatus = (status: string) => {
@@ -643,6 +646,76 @@ export default function ResidentProfileDrawer() {
                               Waive reason: "{rec.waivedReason}"
                             </p>
                           )}
+
+                          {rec.status !== 'FULLY_RECOVERED' && rec.status !== 'WAIVED' && (
+                            <div className="pt-2 border-t border-zinc-900/60 flex justify-end gap-1.5 mt-1.5">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openPaymentRequest(
+                                    'DAMAGE',
+                                    rec.id,
+                                    {
+                                      invoiceNumber: `REC-${rec.id.substr(0, 8).toUpperCase()}`,
+                                      residentName: profile?.globalTenant?.name || 'Resident',
+                                      amount: rec.outstandingAmount ?? rec.amount,
+                                      dueDate: rec.createdAt
+                                    }
+                                  );
+                                }}
+                                className="text-[9px] font-black uppercase text-primary border border-primary/20 bg-primary/5 hover:bg-primary hover:text-black px-2.5 py-1 rounded transition-all cursor-pointer"
+                              >
+                                Request Pay
+                              </button>
+                            </div>
+                          )}
+
+                          {(rec.status === 'FULLY_RECOVERED' || rec.status === 'PARTIALLY_RECOVERED') && (
+                            <div className="pt-2 border-t border-zinc-900/60 flex justify-end gap-1.5 mt-1.5 text-[9px] font-black uppercase">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const rcp = {
+                                    receiptNumber: `RCP-${rec.id.substr(0, 8).toUpperCase()}`,
+                                    residentName: profile?.globalTenant?.name || 'Resident',
+                                    amount: rec.recoveredAmount || rec.amountReceived || rec.amount,
+                                    paymentMethod: rec.paymentMode || 'ONLINE',
+                                    transactionId: rec.referenceNumber || `TXN-${rec.id.substr(0, 8).toUpperCase()}`,
+                                    invoiceNumber: `REC-${rec.id.substr(0, 8).toUpperCase()}`,
+                                    paymentDate: rec.collectedDate || rec.updatedAt,
+                                    status: 'Successful'
+                                  };
+                                  downloadReceiptPDF(rcp);
+                                }}
+                                className="text-zinc-400 hover:text-white border border-zinc-850 hover:border-zinc-700 bg-zinc-900/40 px-2 py-1 rounded transition-colors cursor-pointer"
+                              >
+                                Download PDF
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const rcpMsg = `Payment Received (Damage Recovery)
+
+Resident: ${profile?.globalTenant?.name || 'Resident'}
+Amount: ₹${(rec.recoveredAmount || rec.amountReceived || rec.amount).toLocaleString('en-IN')}
+Transaction ID: ${rec.referenceNumber || `TXN-${rec.id.substr(0, 8).toUpperCase()}`}
+Date: ${new Date(rec.collectedDate || rec.updatedAt).toLocaleDateString('en-IN')}
+
+Status: Successful
+
+Thank you.`;
+                                  window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(rcpMsg)}`, '_blank');
+                                  toast.success('WhatsApp receipt opened.');
+                                }}
+                                className="text-emerald-400 hover:text-emerald-300 border border-emerald-500/10 hover:border-emerald-500/20 bg-emerald-500/5 px-2 py-1 rounded transition-colors cursor-pointer"
+                              >
+                                Share WhatsApp
+                              </button>
+                            </div>
+                          )}
                         </div>
                       ))
                     )}
@@ -866,7 +939,6 @@ export default function ResidentProfileDrawer() {
                                 <span className="text-zinc-500 block text-[8px]">Due Date</span>
                                 <span className="text-zinc-350">{new Date(inv.dueDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
                               </div>
-                              {inv.status === 'PAID' && inv.paidAt && (
                                 <div className="text-right">
                                   <span className="text-zinc-500 block text-[8px]">Payment Date</span>
                                   <span className="text-zinc-350">{new Date(inv.paidAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
@@ -884,10 +956,190 @@ export default function ResidentProfileDrawer() {
                                 )}
                               </div>
                             )}
+
+                            {inv.status !== 'PAID' && (
+                              <div className="pt-2 border-t border-zinc-900/60 flex justify-end gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openPaymentRequest(
+                                      inv.type === 'SECURITY_DEPOSIT' ? 'SECURITY_DEPOSIT' : 'RENT',
+                                      inv.id,
+                                      {
+                                        invoiceNumber: `INV-${inv.id.substr(0, 8).toUpperCase()}`,
+                                        residentName: profile?.globalTenant?.name || 'Resident',
+                                        amount: inv.amount - (inv.paidAmount || 0),
+                                        dueDate: inv.dueDate
+                                      }
+                                    );
+                                  }}
+                                  className="text-[9px] font-black uppercase text-primary border border-primary/20 bg-primary/5 hover:bg-primary hover:text-black px-2.5 py-1 rounded transition-all cursor-pointer"
+                                >
+                                  Request Pay
+                                </button>
+                              </div>
+                            )}
+
+                            {inv.status === 'PAID' && (
+                              <div className="pt-2 border-t border-zinc-900/60 flex justify-end gap-1.5 text-[9px] font-black uppercase">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    const rcp = {
+                                      receiptNumber: `RCP-${inv.id.substr(0, 8).toUpperCase()}`,
+                                      residentName: profile?.globalTenant?.name || 'Resident',
+                                      amount: inv.amount,
+                                      paymentMethod: inv.paymentMode || 'ONLINE',
+                                      transactionId: inv.referenceId || inv.razorpayPayId || `TXN-${inv.id.substr(0, 8).toUpperCase()}`,
+                                      invoiceNumber: `INV-${inv.id.substr(0, 8).toUpperCase()}`,
+                                      paymentDate: inv.paidAt || inv.updatedAt,
+                                      status: 'Successful'
+                                    };
+                                    downloadReceiptPDF(rcp);
+                                  }}
+                                  className="text-zinc-400 hover:text-white border border-zinc-850 hover:border-zinc-700 bg-zinc-900/40 px-2 py-1 rounded transition-colors cursor-pointer"
+                                >
+                                  Download PDF
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    const rcpMsg = `Payment Received
+
+Resident:
+${profile?.globalTenant?.name || 'Resident'}
+
+Amount:
+₹${inv.amount.toLocaleString('en-IN')}
+
+Transaction ID:
+${inv.referenceId || inv.razorpayPayId || `TXN-${inv.id.substr(0, 8).toUpperCase()}`}
+
+Date:
+${new Date(inv.paidAt || inv.updatedAt).toLocaleDateString('en-IN')}
+
+Status:
+Successful
+
+Thank you.`;
+                                    window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(rcpMsg)}`, '_blank');
+                                    toast.success('WhatsApp receipt opened.');
+                                  }}
+                                  className="text-emerald-400 hover:text-emerald-300 border border-emerald-500/10 hover:border-emerald-500/20 bg-emerald-500/5 px-2 py-1 rounded transition-colors cursor-pointer"
+                                >
+                                  Share WhatsApp
+                                </button>
+                              </div>
+                            )}
                           </div>
                         ))
                       )}
                     </div>
+                  </div>
+                </div>
+
+                {/* RESIDENT PAYMENT TIMELINE */}
+                <div className="space-y-3">
+                  <h5 className="text-[11px] font-black uppercase tracking-widest text-zinc-500 flex items-center gap-1.5">
+                    <Clock className="h-3.5 w-3.5" />
+                    Online & Offline Payments Timeline
+                  </h5>
+                  <div className="bg-zinc-950 p-5 border border-zinc-900 rounded-xl space-y-5 relative">
+                    {/* Vertical Connecting Line */}
+                    {profile.paymentReceipts && profile.paymentReceipts.length > 0 && (
+                      <div className="absolute left-7 top-6 bottom-6 w-0.5 bg-zinc-900" />
+                    )}
+
+                    {!profile.paymentReceipts || profile.paymentReceipts.length === 0 ? (
+                      <div className="text-center text-[10px] text-zinc-500 font-bold uppercase tracking-wider py-4">
+                        No payment receipt records found.
+                      </div>
+                    ) : (
+                      profile.paymentReceipts.map((rcp: any) => (
+                        <div key={rcp.id} className="relative flex gap-4 text-xs">
+                          <div className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[10px] font-bold text-emerald-400 z-10">
+                            ✓
+                          </div>
+                          <div className="flex-1 space-y-1">
+                            <div className="flex justify-between items-start">
+                              <div>
+                                <span className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider block">
+                                  {new Date(rcp.paymentDate).toLocaleDateString('en-IN', {
+                                    day: '2-digit',
+                                    month: 'short',
+                                    year: 'numeric',
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                  })}
+                                </span>
+                                <span className="font-extrabold text-zinc-200 block">
+                                  Payment Received (Receipt: {rcp.receiptNumber})
+                                </span>
+                              </div>
+                              <span className="font-black text-emerald-400 text-sm">
+                                +₹{rcp.amount.toLocaleString('en-IN')}
+                              </span>
+                            </div>
+                            
+                            <div className="text-[11px] text-zinc-400 space-y-1">
+                              <p>
+                                Invoice: <strong className="text-zinc-300">{rcp.invoiceNumber || 'N/A'}</strong> | Mode: <span className="uppercase text-zinc-350">{rcp.paymentMethod}</span>
+                              </p>
+                              <p className="font-mono text-[9px] text-zinc-500 truncate max-w-[280px]">
+                                Txn ID: {rcp.transactionId}
+                              </p>
+                            </div>
+
+                            <div className="flex gap-2 pt-1">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const receiptObj = {
+                                    receiptNumber: rcp.receiptNumber,
+                                    residentName: rcp.residentName,
+                                    amount: rcp.amount,
+                                    paymentMethod: rcp.paymentMethod,
+                                    transactionId: rcp.transactionId,
+                                    invoiceNumber: rcp.invoiceNumber,
+                                    paymentDate: rcp.paymentDate,
+                                    status: 'Successful'
+                                  };
+                                  downloadReceiptPDF(receiptObj);
+                                }}
+                                className="text-[9px] font-black uppercase text-zinc-400 hover:text-white border border-zinc-850 hover:border-zinc-700 bg-zinc-900/40 px-2 py-0.5 rounded transition-colors cursor-pointer"
+                              >
+                                Receipt PDF
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const rcpMsg = `Payment Receipt
+                                  
+Resident: ${rcp.residentName}
+Amount: ₹${rcp.amount.toLocaleString('en-IN')}
+Invoice: ${rcp.invoiceNumber || 'N/A'}
+Mode: ${rcp.paymentMethod}
+Txn ID: ${rcp.transactionId}
+Date: ${new Date(rcp.paymentDate).toLocaleDateString('en-IN')}
+
+Status: Successful
+
+Thank you.`;
+                                  window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(rcpMsg)}`, '_blank');
+                                  toast.success('WhatsApp receipt opened.');
+                                }}
+                                className="text-[9px] font-black uppercase text-emerald-400 hover:text-emerald-300 border border-emerald-500/10 hover:border-emerald-500/20 bg-emerald-500/5 px-2 py-0.5 rounded transition-colors cursor-pointer"
+                              >
+                                Share WhatsApp
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    )}
                   </div>
                 </div>
 

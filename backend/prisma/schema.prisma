@@ -24,6 +24,7 @@ enum InvoiceStatus {
   PENDING
   PAST_DUE
   PAID
+  PARTIALLY_PAID
 }
 
 enum ComplaintPriority {
@@ -186,6 +187,7 @@ model PGTenantProfile {
   complaints           Complaint[]
   damageRecoveries     DamageRecovery[]
   depositTransactions  DepositLedgerTransaction[]
+  paymentReceipts      PaymentReceipt[]
 
   @@index([globalTenantId])
   @@index([pgId])
@@ -198,6 +200,7 @@ model RentInvoice {
   id            String          @id @default(uuid())
   pgTenantId    String
   amount        Float
+  paidAmount    Float           @default(0)
   dueDate       DateTime
   status        InvoiceStatus   @default(PENDING)
   razorpayOrdId String?
@@ -215,6 +218,8 @@ model RentInvoice {
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
   tenantProfile PGTenantProfile @relation(fields: [pgTenantId], references: [id])
+  paymentLinks  PaymentLink[]
+  paymentReceipts PaymentReceipt[]
 
   @@index([pgTenantId])
   @@index([dueDate])
@@ -390,6 +395,8 @@ model DamageRecovery {
   
   depositTransactions   DepositLedgerTransaction[]
   recoveryTransactions  RecoveryTransaction[]
+  paymentLinks          PaymentLink[]
+  paymentReceipts       PaymentReceipt[]
 }
 
 model DamageRecoveryItem {
@@ -478,4 +485,52 @@ model MonthlyBusinessSnapshot {
 
   @@unique([pgId, month, year])
   @@index([pgId])
+}
+
+model PaymentLink {
+  id                    String          @id @default(uuid())
+  referenceId           String          @unique
+  razorpayPaymentLinkId String?         @unique
+  paymentUrl            String?
+  status                String          @default("unpaid") // unpaid, paid, expired, cancelled
+  amount                Float
+  
+  invoiceId             String?
+  rentInvoice           RentInvoice?    @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  
+  recoveryId            String?
+  damageRecovery        DamageRecovery? @relation(fields: [recoveryId], references: [id], onDelete: Cascade)
+  
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+
+  @@index([invoiceId])
+  @@index([recoveryId])
+}
+
+model PaymentReceipt {
+  id              String          @id @default(uuid())
+  receiptNumber   String          @unique // e.g. RCP-YYYYMMDD-XXXX
+  residentName    String
+  amount          Float
+  paymentMethod   String
+  transactionId   String          @unique
+  invoiceNumber   String?
+  paymentDate     DateTime        @default(now())
+  status          String          @default("PAID")
+  
+  tenantProfileId String
+  tenantProfile   PGTenantProfile @relation(fields: [tenantProfileId], references: [id], onDelete: Cascade)
+  
+  invoiceId       String?
+  rentInvoice     RentInvoice?    @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  
+  recoveryId      String?
+  damageRecovery  DamageRecovery? @relation(fields: [recoveryId], references: [id], onDelete: SetNull)
+  
+  createdAt       DateTime        @default(now())
+
+  @@index([tenantProfileId])
+  @@index([invoiceId])
+  @@index([recoveryId])
 }

@@ -12,6 +12,9 @@ export const getPGDashboardSummary = async (pgId: string, orgId: string) => {
     throw new Error('PG not found or access denied.');
   }
 
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+
   // Execute aggregations in parallel
   const [
     totalBeds,
@@ -28,7 +31,8 @@ export const getPGDashboardSummary = async (pgId: string, orgId: string) => {
     refundLiabilitySum,
     pendingRefundResidentsCount,
     pendingRecoveriesCount,
-    totalPendingRecoveryAmountData
+    totalPendingRecoveryAmountData,
+    todaysPayments
   ] = await Promise.all([
     // Total Beds (Soft delete filter applies automatically via Prisma Extension)
     prisma.bed.count({
@@ -154,6 +158,15 @@ export const getPGDashboardSummary = async (pgId: string, orgId: string) => {
       _sum: {
         outstandingAmount: true
       }
+    }),
+    // Today's Payments (collected today)
+    prisma.paymentReceipt.aggregate({
+      where: {
+        tenantProfile: { pgId },
+        paymentDate: { gte: startOfToday }
+      },
+      _sum: { amount: true },
+      _count: { id: true }
     })
   ]);
 
@@ -249,6 +262,8 @@ export const getPGDashboardSummary = async (pgId: string, orgId: string) => {
     pendingRefundResidents: pendingRefundResidentsCount,
     pendingRecoveriesCount,
     totalPendingRecoveryAmount: damageChargesVal,
-    totalOutstanding: rentDueVal + damageChargesVal + depositDueVal
+    totalOutstanding: rentDueVal + damageChargesVal + depositDueVal,
+    todaysPaymentsAmount: todaysPayments._sum.amount || 0,
+    todaysPaymentsCount: todaysPayments._count.id || 0
   };
 };

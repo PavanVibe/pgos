@@ -7,6 +7,7 @@ import { fetchApi } from '@/lib/api';
 import ActivityFeed from "@/components/dashboard/ActivityFeed";
 import QuickActions from "@/components/dashboard/QuickActions";
 import TodaysTasksPanel from "@/components/dashboard/TodaysTasksPanel";
+import TodaysPaymentsCard from "@/components/dashboard/TodaysPaymentsCard";
 import PendingCollectionsCard from "@/components/dashboard/PendingCollectionsCard";
 import ProfitSummaryCard from "@/components/dashboard/ProfitSummaryCard";
 import SecurityDepositsCard from "@/components/dashboard/SecurityDepositsCard";
@@ -22,6 +23,7 @@ import VacateResidentSheet from "@/components/vacate/VacateResidentSheet";
 import OccupancyExplorerSheet from "@/components/dashboard/OccupancyExplorerSheet";
 import ComplaintDrawer from "@/components/complaints/ComplaintDrawer";
 import ResolveComplaintSheet from "@/components/complaints/ResolveComplaintSheet";
+import PaymentPreviewDrawer from "@/components/shared/PaymentPreviewDrawer";
 import { Building2, ChevronDown, Plus, Settings } from 'lucide-react';
 import Link from 'next/link';
 
@@ -113,6 +115,7 @@ export default function DashboardPage() {
               <CleaningChecklistCard pgId={activePgId} />
             </div>
             <div className="space-y-6">
+              <TodaysPaymentsCard pgId={activePgId} />
               <ProfitSummaryCard pgId={activePgId} />
               <FollowUpCard pgId={activePgId} />
               <PendingCollectionsCard pgId={activePgId} />
@@ -129,6 +132,7 @@ export default function DashboardPage() {
           <OccupancyExplorerSheet pgId={activePgId} />
           <ComplaintDrawer />
           <ResolveComplaintSheet />
+          <PaymentPreviewDrawer />
         </>
       ) : (
         <div className="h-64 flex flex-col items-center justify-center border border-dashed border-zinc-800 rounded-2xl p-6 bg-zinc-950/20 gap-4">

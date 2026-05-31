@@ -19,9 +19,11 @@ app.get('/health', (req: Request, res: Response) => {
 
 import pgRoutes from './routes/pgRoutes';
 import tenantRoutes from './routes/tenantRoutes';
+import paymentRoutes from './routes/paymentRoutes';
 
 app.use('/api/pgs', pgRoutes);
 app.use('/api/tenants', tenantRoutes);
+app.use('/api/payments', paymentRoutes);
 
 import { CronScheduler } from './services/automation/CronScheduler';
 

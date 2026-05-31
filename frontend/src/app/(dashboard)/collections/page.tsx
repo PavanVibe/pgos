@@ -32,6 +32,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useResidentProfileStore } from '@/store/useResidentProfileStore';
+import { usePaymentRequestStore } from '@/store/usePaymentRequestStore';
 
 interface HistoricalMonth {
   month: string;
@@ -63,6 +64,7 @@ interface LedgerRow {
 export default function CollectionsHistoryPage() {
   const { activePgId, availablePgs, setActivePgId } = useOrganizationStore();
   const { openProfile } = useResidentProfileStore();
+  const { openPaymentRequest } = usePaymentRequestStore();
   const queryClient = useQueryClient();
   const [selectedLedgerMonth, setSelectedLedgerMonth] = useState<{ month: string; year: number; index: number } | null>(null);
 
@@ -128,6 +130,110 @@ export default function CollectionsHistoryPage() {
     if (rate >= 85) return 'text-emerald-400 border-emerald-500/20 bg-emerald-500/5';
     if (rate >= 60) return 'text-amber-400 border-amber-500/20 bg-amber-500/5';
     return 'text-red-400 border-red-500/20 bg-red-500/5';
+  };
+
+  // Bulk Reminders State
+  const [isBulkRemindersOpen, setIsBulkRemindersOpen] = useState(false);
+  const [selectedBulkIds, setSelectedBulkIds] = useState<string[]>([]);
+  const [bulkSendingStatus, setBulkSendingStatus] = useState<Record<string, 'idle' | 'loading' | 'success' | 'failed'>>({});
+  const [isCopyingAll, setIsCopyingAll] = useState(false);
+
+  const unpaidLedgerRows = ledgerData.filter(
+    (row) => row.status !== 'PAID' && row.status !== 'COLLECTED' && row.status !== 'WAIVED' && row.dueAmount > 0
+  );
+
+  const handleOpenBulkReminders = () => {
+    setSelectedBulkIds(unpaidLedgerRows.map(r => r.id));
+    setBulkSendingStatus({});
+    setIsBulkRemindersOpen(true);
+  };
+
+  const handleToggleBulkSelect = (id: string) => {
+    setSelectedBulkIds(prev => 
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
+  const handleSendSingleBulkReminder = async (row: any) => {
+    setBulkSendingStatus(prev => ({ ...prev, [row.id]: 'loading' }));
+    try {
+      const res = await fetchApi('/payments/link/generate', {
+        method: 'POST',
+        body: JSON.stringify({
+          type: row.type === 'SECURITY_DEPOSIT' ? 'SECURITY_DEPOSIT' : row.type === 'DAMAGE_RECOVERY' ? 'DAMAGE' : 'RENT',
+          id: row.id,
+          amount: row.dueAmount
+        })
+      });
+
+      if (res && res.data) {
+        const link = res.data.paymentUrl;
+        const message = `Hi ${row.residentName}
+
+This is a friendly reminder that your payment is due.
+
+Type: ${row.type === 'SECURITY_DEPOSIT' ? 'Security Deposit' : row.type === 'DAMAGE_RECOVERY' ? 'Damage recovery' : 'Rent'}
+Outstanding Amount: ₹${row.dueAmount.toLocaleString('en-IN')}
+
+Please pay securely using this link:
+${link}
+
+Thank you.`;
+
+        const encodedMessage = encodeURIComponent(message);
+        const whatsappUrl = `https://api.whatsapp.com/send?text=${encodedMessage}`;
+        window.open(whatsappUrl, '_blank');
+
+        setBulkSendingStatus(prev => ({ ...prev, [row.id]: 'success' }));
+        toast.success(`WhatsApp reminder opened for ${row.residentName}`);
+      } else {
+        throw new Error('Empty API response');
+      }
+    } catch (err: any) {
+      setBulkSendingStatus(prev => ({ ...prev, [row.id]: 'failed' }));
+      toast.error(`Failed to generate link for ${row.residentName}: ${err.message}`);
+    }
+  };
+
+  const handleCopyAllLinks = async () => {
+    const selectedRows = unpaidLedgerRows.filter(r => selectedBulkIds.includes(r.id));
+    if (selectedRows.length === 0) {
+      toast.error("No residents selected.");
+      return;
+    }
+    
+    setIsCopyingAll(true);
+    let summaryText = `*Consolidated PG Dues Outstanding Summary - ${selectedLedgerMonth?.month} ${selectedLedgerMonth?.year}*\n\n`;
+    
+    try {
+      for (let i = 0; i < selectedRows.length; i++) {
+        const row = selectedRows[i];
+        try {
+          const res = await fetchApi('/payments/link/generate', {
+            method: 'POST',
+            body: JSON.stringify({
+              type: row.type === 'SECURITY_DEPOSIT' ? 'SECURITY_DEPOSIT' : row.type === 'DAMAGE_RECOVERY' ? 'DAMAGE' : 'RENT',
+              id: row.id,
+              amount: row.dueAmount
+            })
+          });
+          if (res && res.data) {
+            summaryText += `${i + 1}. *${row.residentName}* (Room ${row.roomNumber})\n`;
+            summaryText += `   Dues: ₹${row.dueAmount.toLocaleString('en-IN')}\n`;
+            summaryText += `   Pay Link: ${res.data.paymentUrl}\n\n`;
+          }
+        } catch (e) {
+          console.error("Failed to generate bulk link inside loop:", e);
+        }
+      }
+
+      navigator.clipboard.writeText(summaryText);
+      toast.success("Consolidated payment links copied to clipboard!");
+    } catch (err: any) {
+      toast.error("Failed to copy consolidated list.");
+    } finally {
+      setIsCopyingAll(false);
+    }
   };
 
   // Payment mutation for Rent, Deposits, and Damage Recoveries
@@ -500,8 +606,18 @@ export default function CollectionsHistoryPage() {
                     />
                   </div>
 
-                  <div className="text-[11px] font-bold text-zinc-500 uppercase tracking-wide">
-                    Showing {filteredLedger.length} of {ledgerData.length} records
+                  <div className="flex items-center gap-3">
+                    {unpaidLedgerRows.length > 0 && (
+                      <button
+                        onClick={handleOpenBulkReminders}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[10px] uppercase tracking-wider transition-colors cursor-pointer"
+                      >
+                        Send Bulk Reminders ({unpaidLedgerRows.length})
+                      </button>
+                    )}
+                    <div className="text-[11px] font-bold text-zinc-500 uppercase tracking-wide">
+                      Showing {filteredLedger.length} of {ledgerData.length} records
+                    </div>
                   </div>
                 </div>
 
@@ -593,7 +709,26 @@ export default function CollectionsHistoryPage() {
                               </button>
                             </td>
                             <td className="p-3.5 text-right print:hidden">
-                              {row.status !== 'COLLECTED' && row.status !== 'PAID' && row.status !== 'WAIVED' ? (
+                              <div className="flex gap-1.5 justify-end">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openPaymentRequest(
+                                      row.type === 'SECURITY_DEPOSIT' ? 'SECURITY_DEPOSIT' : row.type === 'DAMAGE_RECOVERY' ? 'DAMAGE' : 'RENT',
+                                      row.id,
+                                      {
+                                        invoiceNumber: `${row.type === 'SECURITY_DEPOSIT' ? 'DEP' : row.type === 'DAMAGE_RECOVERY' ? 'REC' : 'INV'}-${row.id.substr(0, 8).toUpperCase()}`,
+                                        residentName: row.residentName,
+                                        amount: row.dueAmount,
+                                        dueDate: row.dueDate || new Date()
+                                      }
+                                    );
+                                  }}
+                                  className="px-2 py-1 rounded-lg bg-zinc-950 border border-zinc-900 text-primary hover:border-primary text-[9px] font-black uppercase tracking-wider cursor-pointer transition-all"
+                                >
+                                  Request Pay
+                                </button>
                                 <button 
                                   onClick={(e) => {
                                     e.stopPropagation();
@@ -604,13 +739,14 @@ export default function CollectionsHistoryPage() {
                                     setCollectionNotes('');
                                     setIsPaymentSheetOpen(true);
                                   }}
-                                  className="px-2.5 py-1 rounded-lg bg-zinc-900 border border-zinc-800 hover:border-primary hover:text-white transition-colors text-[9px] font-black uppercase tracking-wider cursor-pointer"
+                                  className="px-2 py-1 rounded-lg bg-zinc-900 border border-zinc-800 hover:border-primary hover:text-white transition-colors text-[9px] font-black uppercase tracking-wider cursor-pointer"
                                 >
-                                  {row.type === 'SECURITY_DEPOSIT' ? 'Collect Deposit' : row.type === 'DAMAGE_RECOVERY' ? 'Collect Damage Charge' : 'Collect Rent'}
+                                  Collect
                                 </button>
-                              ) : (
-                                <span className="text-zinc-600 text-[9px] font-bold uppercase tracking-wider">Settled</span>
-                              )}
+                              </div>
+                            ) : (
+                              <span className="text-zinc-650 text-[9px] font-bold uppercase tracking-wider">Settled</span>
+                            )}
                             </td>
                           </tr>
                         ))}
@@ -623,6 +759,96 @@ export default function CollectionsHistoryPage() {
           </div>
         </div>
       )}
+
+      {/* Bulk Reminders Sheet */}
+      <Sheet open={isBulkRemindersOpen} onOpenChange={(open) => !open && setIsBulkRemindersOpen(false)}>
+        <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto bg-black text-white border-zinc-850">
+          <SheetHeader>
+            <SheetTitle className="text-emerald-400 flex items-center gap-2 text-xl font-bold">
+              <Users className="h-5 w-5" /> Bulk Reminders Queue
+            </SheetTitle>
+            <SheetDescription className="text-zinc-400">
+              Select unpaid residents to send automated payment requests and pre-filled WhatsApp reminders.
+            </SheetDescription>
+          </SheetHeader>
+
+          <div className="mt-6 space-y-6">
+            <div className="flex gap-2">
+              <Button
+                onClick={handleCopyAllLinks}
+                disabled={isCopyingAll || selectedBulkIds.length === 0}
+                className="flex-1 bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white uppercase tracking-wider font-extrabold text-[10px] h-10 rounded-xl"
+              >
+                {isCopyingAll ? "Generating Links..." : "Copy Consolidated List"}
+              </Button>
+              <Button
+                onClick={() => {
+                  if (selectedBulkIds.length === unpaidLedgerRows.length) {
+                    setSelectedBulkIds([]);
+                  } else {
+                    setSelectedBulkIds(unpaidLedgerRows.map(r => r.id));
+                  }
+                }}
+                className="bg-zinc-950 border border-zinc-900 text-zinc-400 hover:text-zinc-200 uppercase tracking-wider font-extrabold text-[10px] h-10 px-4 rounded-xl"
+              >
+                {selectedBulkIds.length === unpaidLedgerRows.length ? "Deselect All" : "Select All"}
+              </Button>
+            </div>
+
+            <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-1 border border-zinc-900/60 rounded-xl p-3 bg-zinc-950/20">
+              {unpaidLedgerRows.length === 0 ? (
+                <p className="text-zinc-500 text-center text-xs font-bold py-6">No unpaid collections in this ledger.</p>
+              ) : (
+                unpaidLedgerRows.map((row) => {
+                  const isChecked = selectedBulkIds.includes(row.id);
+                  const status = bulkSendingStatus[row.id] || 'idle';
+                  return (
+                    <div key={row.id} className="flex items-center gap-3 p-3 bg-zinc-950 border border-zinc-900 rounded-xl text-xs hover:border-zinc-800 transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() => handleToggleBulkSelect(row.id)}
+                        className="rounded border-zinc-800 bg-zinc-900 text-primary focus:ring-zinc-950 h-4 w-4 accent-primary cursor-pointer"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="font-extrabold text-zinc-200 truncate">{row.residentName}</p>
+                        <p className="text-[10px] text-zinc-500 truncate mt-0.5">
+                          Room {row.roomNumber} ({row.bedNumber}) — {row.type === 'SECURITY_DEPOSIT' ? 'Deposit' : row.type === 'DAMAGE_RECOVERY' ? 'Damage' : 'Rent'}
+                        </p>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <span className="font-black text-zinc-150 block">₹{row.dueAmount.toLocaleString('en-IN')}</span>
+                        <button
+                          onClick={() => handleSendSingleBulkReminder(row)}
+                          disabled={status === 'loading'}
+                          className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded border mt-1.5 cursor-pointer block ml-auto
+                            ${status === 'success' 
+                              ? 'text-emerald-400 border-emerald-500/20 bg-emerald-500/5' 
+                              : status === 'failed'
+                              ? 'text-red-400 border-red-500/20 bg-red-500/5'
+                              : status === 'loading'
+                              ? 'text-zinc-500 border-zinc-900 animate-pulse'
+                              : 'text-primary border-primary/20 bg-primary/5 hover:bg-primary hover:text-black transition-all'}`}
+                        >
+                          {status === 'success' ? 'Opened' : status === 'loading' ? 'Sending...' : 'Reminder'}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            <Button
+              variant="outline"
+              onClick={() => setIsBulkRemindersOpen(false)}
+              className="w-full border border-zinc-850 text-zinc-400 hover:text-white h-11 font-semibold rounded-xl"
+            >
+              Close Bulk Queue
+            </Button>
+          </div>
+        </SheetContent>
+      </Sheet>
 
       {/* 4. Universal Payment Drawer Sheet */}
       <Sheet open={isPaymentSheetOpen} onOpenChange={(open) => !open && setIsPaymentSheetOpen(false)}>

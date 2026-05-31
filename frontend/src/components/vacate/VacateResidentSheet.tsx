@@ -149,7 +149,7 @@ export default function VacateResidentSheet({ pgId }: { pgId: string }) {
   const remainingRefundableAfterDeductions = Math.max(0, refundableDeposit - depositRefunded);
 
   const netSettlement = totalReceivables - remainingRefundableDeposit;
-  const isSettlementLocked = Math.abs(netSettlement) > 0;
+  const isSettlementLocked = Math.abs(netSettlement) > 0.01;
 
   console.log('[DIAGNOSTIC] Move-Out Settlement Dues Check:', {
     rentDue: outstandingRent,
@@ -177,6 +177,7 @@ export default function VacateResidentSheet({ pgId }: { pgId: string }) {
         setSettledCollectedTotal(prev => prev + variables.amount);
       }
       queryClient.invalidateQueries({ queryKey: ['residents', 'profile', localTenantId] });
+      queryClient.refetchQueries({ queryKey: ['residents', 'profile', localTenantId] });
       queryClient.invalidateQueries({ queryKey: ['pg-rooms', pgId] });
       queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.summary(pgId) });
     },
