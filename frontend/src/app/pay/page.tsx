@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { CreditCard, CheckCircle2, AlertTriangle, ExternalLink, ShieldCheck, IndianRupee, QrCode, Building2, User, FileText, ArrowRight, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -20,10 +20,9 @@ interface PaymentDetails {
   invoiceId: string;
 }
 
-export default function PublicPaymentPage() {
+function PaymentCheckoutForm() {
   const searchParams = useSearchParams();
   const referenceId = searchParams.get('referenceId');
-  const amountParam = searchParams.get('amount');
 
   const [loading, setLoading] = useState(true);
   const [details, setDetails] = useState<PaymentDetails | null>(null);
@@ -446,5 +445,18 @@ export default function PublicPaymentPage() {
 
       </div>
     </div>
+  );
+}
+
+export default function PublicPaymentPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-4">
+        <Loader2 className="h-10 w-10 text-emerald-500 animate-spin mb-4" />
+        <p className="text-zinc-400 text-sm font-semibold tracking-wide animate-pulse">Initializing PGOS Secure Gateway...</p>
+      </div>
+    }>
+      <PaymentCheckoutForm />
+    </Suspense>
   );
 }
