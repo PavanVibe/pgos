@@ -144,6 +144,10 @@ export default function VacateResidentSheet({ pgId }: { pgId: string }) {
   const refundableDeposit = Math.max(0, collectedDeposit - totalDeductions);
   const remainingLiability = refundableDeposit === 0 ? Math.abs(collectedDeposit - totalDeductions) : 0;
 
+  const depositRefunded = profile?.depositRefundedAmount || 0;
+  const remainingRefundableDeposit = Math.max(0, collectedDeposit - depositRefunded);
+  const remainingRefundableAfterDeductions = Math.max(0, refundableDeposit - depositRefunded);
+
   // Settle Move-Out Dues & Refunds Mutation
   const settleMutation = useMutation({
     mutationFn: (payload: { action: 'COLLECT' | 'REFUND' | 'WAIVE', amount: number, paymentMode: string }) =>
@@ -388,7 +392,7 @@ export default function VacateResidentSheet({ pgId }: { pgId: string }) {
                             <span className="text-[9px] font-black text-zinc-500 uppercase tracking-widest block">Amount PG Owes Resident</span>
                             <div className="flex justify-between items-center text-xs">
                               <span className="text-zinc-400">Refundable Deposit</span>
-                              <span className="font-semibold text-zinc-200">₹{collectedDeposit.toLocaleString('en-IN')}</span>
+                              <span className="font-semibold text-zinc-200">₹{remainingRefundableAfterDeductions.toLocaleString('en-IN')}</span>
                             </div>
                             <div className="flex justify-between items-center text-xs text-zinc-500 text-[10px] leading-normal pt-1.5 border-t border-zinc-900/60">
                               <span>(after damage deductions)</span>
@@ -410,33 +414,33 @@ export default function VacateResidentSheet({ pgId }: { pgId: string }) {
                           </div>
                           <div className="flex justify-between items-center text-zinc-400">
                             <span>PG Owes Resident (Refundable)</span>
-                            <span className="font-semibold">₹{collectedDeposit.toLocaleString('en-IN')}</span>
+                            <span className="font-semibold">₹{remainingRefundableDeposit.toLocaleString('en-IN')}</span>
                           </div>
 
                           {/* Net Settlement display */}
-                          {totalReceivables > collectedDeposit && (
+                          {totalReceivables > remainingRefundableDeposit && (
                             <div className="flex justify-between items-center font-bold text-sm pt-2.5 border-t border-zinc-900">
                               <span className="text-red-400 flex items-center gap-1">
                                 <ShieldAlert className="h-4 w-4 text-red-500" /> Net Due To PG
                               </span>
                               <span className="text-lg font-black text-red-400 animate-pulse">
-                                ₹{(totalReceivables - collectedDeposit).toLocaleString('en-IN')}
+                                ₹{(totalReceivables - remainingRefundableDeposit).toLocaleString('en-IN')}
                               </span>
                             </div>
                           )}
 
-                          {collectedDeposit > totalReceivables && (
+                          {remainingRefundableDeposit > totalReceivables && (
                             <div className="flex justify-between items-center font-bold text-sm pt-2.5 border-t border-zinc-900">
                               <span className="text-green-400 flex items-center gap-1">
                                 <Sparkles className="h-4 w-4 text-green-400" /> Net Refund To Resident
                               </span>
                               <span className="text-lg font-black text-green-400 animate-pulse">
-                                ₹{(collectedDeposit - totalReceivables).toLocaleString('en-IN')}
+                                ₹{(remainingRefundableDeposit - totalReceivables).toLocaleString('en-IN')}
                               </span>
                             </div>
                           )}
 
-                          {totalReceivables === collectedDeposit && totalReceivables > 0 && (
+                          {totalReceivables === remainingRefundableDeposit && totalReceivables > 0 && (
                             <div className="flex justify-between items-center font-bold text-sm pt-2.5 border-t border-zinc-900 text-zinc-300">
                               <span>Net Settlement Dues</span>
                               <span className="text-lg font-black">₹0</span>
@@ -453,30 +457,30 @@ export default function VacateResidentSheet({ pgId }: { pgId: string }) {
                         ) : (
                           <>
                             {/* Option A: Resident owes PG */}
-                            {totalReceivables > collectedDeposit && !isOutstandingBypassed && (
+                            {totalReceivables > remainingRefundableDeposit && !isOutstandingBypassed && (
                               <div className="space-y-2 pt-2 border-t border-dashed border-zinc-900">
                                 <span className="text-[9px] font-black text-zinc-500 uppercase tracking-widest block">Dues Collection Actions</span>
                                 <div className="grid grid-cols-2 gap-2">
                                   <button
-                                    onClick={() => handleSettleAction('COLLECT', totalReceivables - collectedDeposit, 'cash')}
+                                    onClick={() => handleSettleAction('COLLECT', totalReceivables - remainingRefundableDeposit, 'cash')}
                                     className="p-2 rounded-lg bg-zinc-900 border border-zinc-800 text-[10px] font-extrabold uppercase hover:border-primary hover:text-white cursor-pointer select-none"
                                   >
                                     Collect Cash
                                   </button>
                                   <button
-                                    onClick={() => handleSettleAction('COLLECT', totalReceivables - collectedDeposit, 'upi')}
+                                    onClick={() => handleSettleAction('COLLECT', totalReceivables - remainingRefundableDeposit, 'upi')}
                                     className="p-2 rounded-lg bg-zinc-900 border border-zinc-800 text-[10px] font-extrabold uppercase hover:border-primary hover:text-white cursor-pointer select-none"
                                   >
                                     Collect UPI
                                   </button>
                                   <button
-                                    onClick={() => handleSettleAction('COLLECT', totalReceivables - collectedDeposit, 'bank_transfer')}
+                                    onClick={() => handleSettleAction('COLLECT', totalReceivables - remainingRefundableDeposit, 'bank_transfer')}
                                     className="p-2 rounded-lg bg-zinc-900 border border-zinc-800 text-[10px] font-extrabold uppercase hover:border-primary hover:text-white cursor-pointer select-none"
                                   >
                                     Collect Transfer
                                   </button>
                                   <button
-                                    onClick={() => handleSettleAction('WAIVE', totalReceivables - collectedDeposit, 'cash')}
+                                    onClick={() => handleSettleAction('WAIVE', totalReceivables - remainingRefundableDeposit, 'cash')}
                                     className="p-2 rounded-lg bg-zinc-900 border border-red-950 text-red-400 hover:bg-red-500/5 text-[10px] font-extrabold uppercase cursor-pointer select-none"
                                   >
                                     Waive Dues
@@ -498,24 +502,24 @@ export default function VacateResidentSheet({ pgId }: { pgId: string }) {
                             )}
 
                             {/* Option B: PG owes Resident */}
-                            {collectedDeposit > totalReceivables && (
+                            {remainingRefundableDeposit > totalReceivables && (
                               <div className="space-y-2 pt-2 border-t border-dashed border-zinc-900">
                                 <span className="text-[9px] font-black text-zinc-500 uppercase tracking-widest block">Refund Processing Actions</span>
                                 <div className="grid grid-cols-3 gap-2">
                                   <button
-                                    onClick={() => handleSettleAction('REFUND', collectedDeposit - totalReceivables, 'cash')}
+                                    onClick={() => handleSettleAction('REFUND', remainingRefundableDeposit - totalReceivables, 'cash')}
                                     className="p-2 rounded-lg bg-zinc-900 border border-zinc-800 text-[10px] font-extrabold uppercase hover:border-primary hover:text-white cursor-pointer select-none"
                                   >
                                     Refund Cash
                                   </button>
                                   <button
-                                    onClick={() => handleSettleAction('REFUND', collectedDeposit - totalReceivables, 'upi')}
+                                    onClick={() => handleSettleAction('REFUND', remainingRefundableDeposit - totalReceivables, 'upi')}
                                     className="p-2 rounded-lg bg-zinc-900 border border-zinc-800 text-[10px] font-extrabold uppercase hover:border-primary hover:text-white cursor-pointer select-none"
                                   >
                                     Refund UPI
                                   </button>
                                   <button
-                                    onClick={() => handleSettleAction('REFUND', collectedDeposit - totalReceivables, 'bank_transfer')}
+                                    onClick={() => handleSettleAction('REFUND', remainingRefundableDeposit - totalReceivables, 'bank_transfer')}
                                     className="p-2 rounded-lg bg-zinc-900 border border-zinc-800 text-[10px] font-extrabold uppercase hover:border-primary hover:text-white cursor-pointer select-none"
                                   >
                                     Refund Transfer
@@ -528,7 +532,7 @@ export default function VacateResidentSheet({ pgId }: { pgId: string }) {
                       </div>
 
                       {/* Step 5: Final Confirmation block */}
-                      {((totalReceivables === 0 && collectedDeposit === 0) || isOutstandingBypassed) && (
+                      {((totalReceivables === 0 && remainingRefundableDeposit === 0) || isOutstandingBypassed) && (
                         <div className="bg-emerald-500/5 text-emerald-400 border border-emerald-500/20 p-4 rounded-xl space-y-2 select-none animate-in fade-in zoom-in duration-300">
                           <div className="flex items-center gap-2 font-black text-sm">
                             <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs">✓</span>
@@ -557,7 +561,7 @@ export default function VacateResidentSheet({ pgId }: { pgId: string }) {
                       )}
 
                       {/* Settlement Action lock warnings */}
-                      {!(totalReceivables === 0 && collectedDeposit === 0) && !isOutstandingBypassed && (
+                      {!(totalReceivables === 0 && remainingRefundableDeposit === 0) && !isOutstandingBypassed && (
                         <div className="bg-amber-500/5 text-amber-500 border border-amber-500/20 p-4 rounded-xl text-xs leading-relaxed font-semibold">
                           <strong>Settlement Locked:</strong> Please settle all financial dues or refunds above, or mark remaining dues outstanding before vacating.
                         </div>
@@ -578,7 +582,7 @@ export default function VacateResidentSheet({ pgId }: { pgId: string }) {
                           variant="destructive" 
                           className="w-1/2 h-11 font-semibold cursor-pointer" 
                           onClick={handleConfirm} 
-                          disabled={loading || (!(totalReceivables === 0 && collectedDeposit === 0) && !isOutstandingBypassed)}
+                          disabled={loading || (!(totalReceivables === 0 && remainingRefundableDeposit === 0) && !isOutstandingBypassed)}
                         >
                           {loading ? 'Processing...' : 'Confirm Vacate'}
                         </Button>
