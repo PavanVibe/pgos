@@ -659,6 +659,7 @@ export default function ResidentProfileDrawer() {
                                     {
                                       invoiceNumber: `REC-${rec.id.substr(0, 8).toUpperCase()}`,
                                       residentName: profile?.globalTenant?.name || 'Resident',
+                                      residentPhone: profile?.globalTenant?.phone,
                                       amount: rec.outstandingAmount ?? rec.amount,
                                       dueDate: rec.createdAt
                                     }
@@ -972,6 +973,7 @@ Thank you.`;
                                       {
                                         invoiceNumber: `INV-${inv.id.substr(0, 8).toUpperCase()}`,
                                         residentName: profile?.globalTenant?.name || 'Resident',
+                                        residentPhone: profile?.globalTenant?.phone,
                                         amount: inv.amount - (inv.paidAmount || 0),
                                         dueDate: inv.dueDate
                                       }

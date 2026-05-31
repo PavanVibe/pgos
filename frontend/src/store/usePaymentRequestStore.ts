@@ -7,6 +7,7 @@ interface PaymentRequestState {
   paymentRequestDetails: {
     invoiceNumber?: string;
     residentName: string;
+    residentPhone?: string;
     amount: number;
     dueDate?: string | Date;
   } | null;
@@ -16,6 +17,7 @@ interface PaymentRequestState {
     details: {
       invoiceNumber?: string;
       residentName: string;
+      residentPhone?: string;
       amount: number;
       dueDate?: string | Date;
     }

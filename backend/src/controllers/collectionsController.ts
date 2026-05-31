@@ -160,7 +160,7 @@ export const getMonthlyCollectionLedger = async (req: Request, res: Response) =>
           tenantProfile: {
             include: {
               globalTenant: {
-                select: { name: true },
+                select: { name: true, phone: true, email: true },
               },
               room: {
                 select: { number: true },
@@ -191,7 +191,7 @@ export const getMonthlyCollectionLedger = async (req: Request, res: Response) =>
           tenantProfile: {
             include: {
               globalTenant: {
-                select: { name: true },
+                select: { name: true, phone: true, email: true },
               },
               room: {
                 select: { number: true },
@@ -234,6 +234,8 @@ export const getMonthlyCollectionLedger = async (req: Request, res: Response) =>
         id: inv.id,
         tenantProfileId: profile.id,
         residentName: profile.globalTenant.name || 'Unknown',
+        residentPhone: profile.globalTenant.phone,
+        residentEmail: profile.globalTenant.email || null,
         roomNumber: profile.room?.number || profile.historicalRoomNumber || '-',
         bedNumber: profile.bed?.bedNumber || profile.historicalBedNumber || '-',
         amountPaid: inv.status === 'PAID' ? inv.amount : 0,
@@ -273,6 +275,8 @@ export const getMonthlyCollectionLedger = async (req: Request, res: Response) =>
         id: rec.id,
         tenantProfileId: profile.id,
         residentName: profile.globalTenant.name || 'Unknown',
+        residentPhone: profile.globalTenant.phone,
+        residentEmail: profile.globalTenant.email || null,
         roomNumber: profile.room?.number || profile.historicalRoomNumber || '-',
         bedNumber: profile.bed?.bedNumber || profile.historicalBedNumber || '-',
         amountPaid: rec.recoveredAmount || 0,

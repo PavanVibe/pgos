@@ -51,6 +51,7 @@ interface HistoricalMonth {
 interface LedgerRow {
   id: string;
   residentName: string;
+  residentPhone?: string;
   roomNumber: string;
   bedNumber: string;
   amountPaid: number;
@@ -725,6 +726,7 @@ Thank you.`;
                                         {
                                           invoiceNumber: `${row.type === 'SECURITY_DEPOSIT' ? 'DEP' : row.type === 'DAMAGE_RECOVERY' ? 'REC' : 'INV'}-${row.id.substr(0, 8).toUpperCase()}`,
                                           residentName: row.residentName,
+                                          residentPhone: row.residentPhone,
                                           amount: row.dueAmount,
                                           dueDate: row.dueDate || new Date()
                                         }

@@ -1,8 +1,6 @@
-'use client';
-
 import { useState, useRef } from 'react';
 import { QRCodeCanvas } from 'qrcode.react';
-import { X, Download, Share2, Check } from 'lucide-react';
+import { X, Download, Share2, Check, Printer, Send } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface PaymentQRCodeModalProps {
@@ -10,6 +8,7 @@ interface PaymentQRCodeModalProps {
   onClose: () => void;
   paymentUrl: string;
   residentName: string;
+  residentPhone?: string;
   amount: number;
   type: string;
 }
@@ -19,6 +18,7 @@ export default function PaymentQRCodeModal({
   onClose,
   paymentUrl,
   residentName,
+  residentPhone,
   amount,
   type
 }: PaymentQRCodeModalProps) {
@@ -49,6 +49,72 @@ export default function PaymentQRCodeModal({
     downloadLink.click();
     document.body.removeChild(downloadLink);
     toast.success('QR Code downloaded successfully.');
+  };
+
+  const handlePrintQR = () => {
+    const canvas = document.querySelector('canvas') as HTMLCanvasElement | null;
+    if (!canvas) {
+      toast.error('Failed to locate QR code element.');
+      return;
+    }
+    const dataUrl = canvas.toDataURL('image/png');
+    const windowContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Print QR Code</title>
+        <style>
+          body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            font-family: sans-serif;
+            text-align: center;
+          }
+          img {
+            max-width: 250px;
+            margin-bottom: 20px;
+          }
+          h2 { margin: 5px 0; font-size: 24px; }
+          p { color: #555; margin: 5px 0; font-size: 16px; }
+        </style>
+      </head>
+      <body>
+        <img src="${dataUrl}" />
+        <h2>${residentName}</h2>
+        <p>${type} — ₹${amount.toLocaleString('en-IN')}</p>
+        <script>
+          window.onload = function() {
+            window.print();
+            setTimeout(function() { window.close(); }, 500);
+          }
+        </script>
+      </body>
+      </html>
+    `;
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(windowContent);
+      printWindow.document.close();
+    } else {
+      toast.error('Popup blocked. Please allow popups to print.');
+    }
+  };
+
+  const handleSendQRWhatsApp = () => {
+    const message = `Hi ${residentName},\n\nHere is your QR Code to scan and pay ₹${amount.toLocaleString('en-IN')} for ${type}:\n\n${paymentUrl}`;
+    const encoded = encodeURIComponent(message);
+    if (residentPhone) {
+      const cleanPhone = residentPhone.replace(/[^\d+]/g, '');
+      const formattedPhone = cleanPhone.startsWith('+') ? cleanPhone.slice(1) : cleanPhone;
+      window.open(`https://wa.me/${formattedPhone}?text=${encoded}`, '_blank');
+    } else {
+      window.open(`https://api.whatsapp.com/send?text=${encoded}`, '_blank');
+    }
+    toast.success('QR WhatsApp request opened.');
   };
 
   return (
@@ -100,21 +166,19 @@ export default function PaymentQRCodeModal({
             onClick={handleDownloadQR}
             className="flex items-center justify-center gap-1.5 p-3 rounded-xl bg-zinc-900 border border-zinc-850 hover:border-zinc-700 hover:text-white font-bold cursor-pointer transition-all"
           >
-            <Download className="h-4 w-4 text-primary" /> Download QR
+            <Download className="h-4 w-4 text-primary" /> Download
           </button>
           <button
-            onClick={handleCopyLink}
+            onClick={handlePrintQR}
             className="flex items-center justify-center gap-1.5 p-3 rounded-xl bg-zinc-900 border border-zinc-850 hover:border-zinc-700 hover:text-white font-bold cursor-pointer transition-all"
           >
-            {copied ? (
-              <>
-                <Check className="h-4 w-4 text-emerald-400" /> Copied!
-              </>
-            ) : (
-              <>
-                <Share2 className="h-4 w-4 text-primary" /> Copy Link
-              </>
-            )}
+            <Printer className="h-4 w-4 text-primary" /> Print QR
+          </button>
+          <button
+            onClick={handleSendQRWhatsApp}
+            className="flex items-center justify-center gap-1.5 p-3 rounded-xl bg-zinc-900 border border-zinc-850 hover:border-zinc-700 hover:text-white font-bold cursor-pointer transition-all col-span-2"
+          >
+            <Send className="h-4 w-4 text-emerald-400" /> Share via WhatsApp
           </button>
         </div>
       </div>

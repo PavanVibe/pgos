@@ -34,7 +34,7 @@ export default function PaymentPreviewDrawer() {
     return null;
   }
 
-  const { invoiceNumber, residentName, amount, dueDate } = paymentRequestDetails;
+  const { invoiceNumber, residentName, residentPhone, amount, dueDate } = paymentRequestDetails;
 
   const getDuesLabel = () => {
     switch (paymentRequestType) {
@@ -83,30 +83,25 @@ export default function PaymentPreviewDrawer() {
   };
 
   const handleSendPaymentRequest = async () => {
+    // 1. Direct Phone Validation
+    if (!residentPhone) {
+      toast.error("Resident phone number is required before requesting payment.");
+      return;
+    }
+
     const link = await getOrGeneratePaymentLink();
     if (!link) return;
 
     // Template message
-    const message = `Hi ${residentName}
-
-Your payment is due.
-
-Type:
-${getDuesLabel()}
-
-Amount:
-₹${amount.toLocaleString('en-IN')}
-
-Pay securely here:
-${link.paymentUrl}
-
-Thank you.`;
+    const message = `Hi ${residentName},\n\nYour payment is due.\n\nType: ${getDuesLabel()}\nAmount: ₹${amount.toLocaleString('en-IN')}\n\nPay securely here:\n${link.paymentUrl}\n\nThank you.`;
 
     const encodedMessage = encodeURIComponent(message);
-    const whatsappUrl = `https://api.whatsapp.com/send?text=${encodedMessage}`;
+    const cleanPhone = residentPhone.replace(/[^\d+]/g, '');
+    const formattedPhone = cleanPhone.startsWith('+') ? cleanPhone.slice(1) : cleanPhone;
+    const whatsappUrl = `https://wa.me/${formattedPhone}?text=${encodedMessage}`;
     
     window.open(whatsappUrl, '_blank');
-    toast.success('WhatsApp payment request link opened.');
+    toast.success('WhatsApp payment request link opened directly.');
   };
 
   const handleShowQR = async () => {
@@ -123,6 +118,37 @@ Thank you.`;
     setCopied(true);
     toast.success('Payment Link copied to clipboard.');
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleRegenerateLink = async () => {
+    setLoading(true);
+    setGeneratedLink(null);
+    try {
+      const response = await fetchApi('/payments/link/generate', {
+        method: 'POST',
+        body: JSON.stringify({
+          type: paymentRequestType,
+          id: paymentRequestTargetId,
+          amount: amount,
+          forceRegenerate: true
+        })
+      });
+
+      if (response && response.data) {
+        const linkData = {
+          paymentUrl: response.data.paymentUrl,
+          razorpayPaymentLinkId: response.data.razorpayPaymentLinkId
+        };
+        setGeneratedLink(linkData);
+        toast.success('Payment Link regenerated successfully.');
+      } else {
+        throw new Error('Regeneration returned empty link.');
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to regenerate payment link.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const dateFormatted = dueDate 
@@ -192,6 +218,33 @@ Thank you.`;
               </div>
             </div>
 
+            {/* Redesigned Payment Request Details List */}
+            <div className="bg-zinc-950/60 border border-zinc-900 rounded-2xl p-4 space-y-3.5 text-xs">
+              <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest block">System Reference Details</span>
+              <div className="flex justify-between items-center py-1 border-b border-zinc-900/60">
+                <span className="text-zinc-500">Resident Name:</span>
+                <span className="font-bold text-zinc-200">{residentName}</span>
+              </div>
+              <div className="flex justify-between items-center py-1 border-b border-zinc-900/60">
+                <span className="text-zinc-500">Invoice Number:</span>
+                <span className="font-mono text-zinc-300">{getInvoiceNumberFallback()}</span>
+              </div>
+              <div className="flex justify-between items-center py-1 border-b border-zinc-900/60">
+                <span className="text-zinc-500">Payment Status:</span>
+                <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${generatedLink ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>
+                  {generatedLink ? 'PAYMENT_LINK_SENT' : 'UNPAID'}
+                </span>
+              </div>
+              <div className="flex justify-between items-center py-1 border-b border-zinc-900/60">
+                <span className="text-zinc-500">Generated Time:</span>
+                <span className="text-zinc-300 font-semibold">{new Date().toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
+              </div>
+              <div className="flex justify-between items-center py-1">
+                <span className="text-zinc-500">Expiry Time (7 Days):</span>
+                <span className="text-zinc-355 font-semibold">{new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
+              </div>
+            </div>
+
             {/* Actions Grid */}
             <div className="space-y-3">
               <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest block">Collection Actions</span>
@@ -199,38 +252,45 @@ Thank you.`;
               <Button
                 onClick={handleSendPaymentRequest}
                 disabled={loading}
-                className="w-full h-12 bg-primary text-black font-extrabold text-sm hover:opacity-90 transition-all flex items-center justify-center gap-2 cursor-pointer rounded-xl"
+                className="w-full h-12 bg-emerald-600 text-white font-extrabold text-sm hover:bg-emerald-500 transition-all flex items-center justify-center gap-2 cursor-pointer rounded-xl"
               >
                 {loading ? (
-                  <span className="h-4 w-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                  <span className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                 ) : (
                   <Send className="h-4.5 w-4.5 stroke-[2.5]" />
                 )}
                 Send Payment Request
               </Button>
 
-              <div className="grid grid-cols-2 gap-2 text-xs">
+              <div className="grid grid-cols-3 gap-2 text-[10px]">
                 <button
                   onClick={handleShowQR}
                   disabled={loading}
-                  className="flex items-center justify-center gap-1.5 p-3 rounded-xl bg-zinc-900 border border-zinc-850 hover:border-zinc-700 hover:text-white font-bold cursor-pointer transition-all disabled:opacity-50"
+                  className="flex flex-col items-center justify-center gap-1.5 p-3 rounded-xl bg-zinc-900 border border-zinc-850 hover:border-zinc-700 hover:text-white font-bold cursor-pointer transition-all disabled:opacity-50"
                 >
                   <QrCode className="h-4 w-4 text-primary" /> Generate QR
                 </button>
                 <button
                   onClick={handleCopyLink}
                   disabled={loading}
-                  className="flex items-center justify-center gap-1.5 p-3 rounded-xl bg-zinc-900 border border-zinc-850 hover:border-zinc-700 hover:text-white font-bold cursor-pointer transition-all disabled:opacity-50"
+                  className="flex flex-col items-center justify-center gap-1.5 p-3 rounded-xl bg-zinc-900 border border-zinc-850 hover:border-zinc-700 hover:text-white font-bold cursor-pointer transition-all disabled:opacity-50"
                 >
                   {copied ? (
                     <>
-                      <Check className="h-4 w-4 text-emerald-400" /> Copied!
+                      <Check className="h-4 w-4 text-emerald-400 animate-bounce" /> Copied!
                     </>
                   ) : (
                     <>
                       <Copy className="h-4 w-4 text-primary" /> Copy Link
                     </>
                   )}
+                </button>
+                <button
+                  onClick={handleRegenerateLink}
+                  disabled={loading}
+                  className="flex flex-col items-center justify-center gap-1.5 p-3 rounded-xl bg-zinc-900 border border-zinc-850 hover:border-zinc-700 hover:text-white font-bold cursor-pointer transition-all disabled:opacity-50"
+                >
+                  <Sparkles className="h-4 w-4 text-amber-400" /> Regenerate
                 </button>
               </div>
             </div>
@@ -241,7 +301,7 @@ Thank you.`;
                 <Sparkles className="h-3.5 w-3.5 text-primary" /> Test Mode Simulation
               </div>
               <p>
-                Online payment links are created using sandbox test links. scan QR or pay links, and PGOS will automatically capture and settle ledgers in seconds without card verification fees.
+                Online payment links are created using sandbox test links. Scan QR or pay links, and PGOS will automatically capture and settle ledgers in seconds without card verification fees.
               </p>
             </div>
 
@@ -263,6 +323,7 @@ Thank you.`;
           onClose={() => setQrOpen(false)}
           paymentUrl={generatedLink.paymentUrl}
           residentName={residentName}
+          residentPhone={residentPhone}
           amount={amount}
           type={getDuesLabel()}
         />
