@@ -4,7 +4,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '
 import { usePaymentRequestStore } from '@/store/usePaymentRequestStore';
 import { Button } from '@/components/ui/button';
 import { CreditCard, User, Calendar, IndianRupee, FileText, Send, QrCode, Copy, Check, Sparkles } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { fetchApi } from '@/lib/api';
 import { toast } from 'sonner';
 import PaymentQRCodeModal from './PaymentQRCodeModal';
@@ -18,12 +18,19 @@ export default function PaymentPreviewDrawer() {
     closePaymentRequest
   } = usePaymentRequestStore();
 
+  console.log("[DIAGNOSTIC] PaymentPreviewDrawer rendering. isPaymentRequestOpen:", isPaymentRequestOpen);
+
+  useEffect(() => {
+    console.log("[DIAGNOSTIC] PaymentPreviewDrawer open effect triggered. isPaymentRequestOpen:", isPaymentRequestOpen);
+  }, [isPaymentRequestOpen]);
+
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
   const [qrOpen, setQrOpen] = useState(false);
   const [generatedLink, setGeneratedLink] = useState<{ paymentUrl: string; razorpayPaymentLinkId: string } | null>(null);
 
   if (!isPaymentRequestOpen || !paymentRequestType || !paymentRequestTargetId || !paymentRequestDetails) {
+    console.log("[DIAGNOSTIC] PaymentPreviewDrawer hidden due to empty or closed state.");
     return null;
   }
 

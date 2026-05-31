@@ -717,6 +717,7 @@ Thank you.`;
                                     type="button"
                                     onClick={(e) => {
                                       e.stopPropagation();
+                                      console.log("[DIAGNOSTIC] collections/page.tsx: Request Pay clicked for row:", row.id);
                                       openPaymentRequest(
                                         row.type === 'SECURITY_DEPOSIT' ? 'SECURITY_DEPOSIT' : row.type === 'DAMAGE_RECOVERY' ? 'DAMAGE' : 'RENT',
                                         row.id,

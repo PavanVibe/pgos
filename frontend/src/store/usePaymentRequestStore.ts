@@ -28,16 +28,22 @@ export const usePaymentRequestStore = create<PaymentRequestState>((set) => ({
   paymentRequestType: null,
   paymentRequestTargetId: null,
   paymentRequestDetails: null,
-  openPaymentRequest: (type, targetId, details) => set({
-    isPaymentRequestOpen: true,
-    paymentRequestType: type,
-    paymentRequestTargetId: targetId,
-    paymentRequestDetails: details
-  }),
-  closePaymentRequest: () => set({
-    isPaymentRequestOpen: false,
-    paymentRequestType: null,
-    paymentRequestTargetId: null,
-    paymentRequestDetails: null
-  })
+  openPaymentRequest: (type, targetId, details) => {
+    console.log("[DIAGNOSTIC] store: openPaymentRequest called with:", { type, targetId, details });
+    set({
+      isPaymentRequestOpen: true,
+      paymentRequestType: type,
+      paymentRequestTargetId: targetId,
+      paymentRequestDetails: details
+    });
+  },
+  closePaymentRequest: () => {
+    console.log("[DIAGNOSTIC] store: closePaymentRequest called");
+    set({
+      isPaymentRequestOpen: false,
+      paymentRequestType: null,
+      paymentRequestTargetId: null,
+      paymentRequestDetails: null
+    });
+  }
 }));

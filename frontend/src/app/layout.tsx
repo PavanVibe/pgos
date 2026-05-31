@@ -13,6 +13,7 @@ export const metadata: Metadata = {
 
 import { QueryProvider } from '@/providers/QueryProvider';
 import ResidentProfileDrawer from '@/components/shared/ResidentProfileDrawer';
+import PaymentPreviewDrawer from '@/components/shared/PaymentPreviewDrawer';
 
 export default function RootLayout({
   children,
@@ -26,6 +27,7 @@ export default function RootLayout({
           <body className={inter.className}>
             {children}
             <ResidentProfileDrawer />
+            <PaymentPreviewDrawer />
             <Toaster />
           </body>
         </html>
