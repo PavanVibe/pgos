@@ -33,54 +33,91 @@ export class RazorpayService {
     const referenceId = `ref_${type.toLowerCase()}_${id}_${Date.now()}`;
     const amountInPaise = Math.round(amount * 100);
 
+    console.log(`[RAZORPAY DIAGNOSTIC] Starting createPaymentLink flow:
+    - NODE_ENV: ${process.env.NODE_ENV}
+    - PAYMENT_MODE: ${process.env.PAYMENT_MODE}
+    - isProd: ${isProd}
+    - RAZORPAY_KEY_ID present: ${!!process.env.RAZORPAY_KEY_ID} (Length: ${process.env.RAZORPAY_KEY_ID?.length || 0})
+    - RAZORPAY_KEY_SECRET present: ${!!process.env.RAZORPAY_KEY_SECRET} (Length: ${process.env.RAZORPAY_KEY_SECRET?.length || 0})
+    - Razorpay Client Initialized: ${!!razorpay}`);
+
+    console.log(`[RAZORPAY DIAGNOSTIC] Inputs:
+    - Type: ${type}
+    - ID: ${id}
+    - Amount: ₹${amount} (Paise: ${amountInPaise})
+    - Resident Name: ${residentName}
+    - Phone: ${phone}
+    - Email: ${email}
+    - Reference ID: ${referenceId}`);
+
     let paymentUrl = '';
     let razorpayPaymentLinkId = '';
 
     if (razorpay) {
-      try {
-        const createPromise = razorpay.paymentLink.create({
-          amount: amountInPaise,
-          currency: 'INR',
-          accept_partial: true,
-          first_min_partial_amount: 100, // min 1 INR for partial
-          reference_id: referenceId,
-          description: `${type.replace('_', ' ')} payment for ${residentName}`,
-          customer: {
-            name: residentName,
-            contact: phone.startsWith('+') ? phone : `+91${phone}`,
-            email: email || undefined,
-          },
-          notify: {
-            sms: false,
-            email: false,
-          },
-          options: {
-            checkout: {
-              name: 'PGOS Payments',
-            }
+      const payload = {
+        amount: amountInPaise,
+        currency: 'INR',
+        accept_partial: true,
+        first_min_partial_amount: 100, // min 1 INR for partial
+        reference_id: referenceId,
+        description: `${type.replace('_', ' ')} payment for ${residentName}`,
+        customer: {
+          name: residentName,
+          contact: phone.startsWith('+') ? phone : `+91${phone}`,
+          email: email || undefined,
+        },
+        notify: {
+          sms: false,
+          email: false,
+        },
+        options: {
+          checkout: {
+            name: 'PGOS Payments',
           }
-        });
+        }
+      };
+
+      console.log('[RAZORPAY DIAGNOSTIC] Sending payload to Razorpay:', JSON.stringify(payload, null, 2));
+
+      try {
+        console.log('[RAZORPAY DIAGNOSTIC] Initiating paymentLink.create network request to Razorpay API...');
+        const createPromise = razorpay.paymentLink.create(payload);
 
         const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Razorpay API request timed out')), 5000)
+          setTimeout(() => reject(new Error('Razorpay API request timed out after 5000ms')), 5000)
         );
 
         const link = await Promise.race([createPromise, timeoutPromise]) as any;
+        console.log('[RAZORPAY DIAGNOSTIC] Razorpay API responded successfully:', JSON.stringify(link, null, 2));
         paymentUrl = link.short_url;
         razorpayPaymentLinkId = link.id;
       } catch (err: any) {
-        console.error('[RAZORPAY SERVICE ERROR] Live Link Failed:', err.message);
+        console.error('[RAZORPAY DIAGNOSTIC ERROR] Live Link Generation Failed:');
+        console.error('- Message:', err.message);
+        console.error('- Code:', err.code);
+        console.error('- StatusCode:', err.statusCode);
+        console.error('- Description:', err.description);
+        console.error('- Full Error:', JSON.stringify(err, null, 2));
+
+        const detailedError = `Razorpay Link Generation Failed: ${err.message || 'Unknown Error'}. Code: ${err.code || 'N/A'}. Description: ${err.description || 'N/A'}. Status: ${err.statusCode || 'N/A'}.`;
+        
         if (isProd) {
-          throw new Error('Unable to generate payment link. Please retry in a few moments.');
+          throw new Error(detailedError);
         }
+        
+        console.log('[RAZORPAY DIAGNOSTIC WARNING] Dev/Test mode active. Falling back to simulator link due to error.');
         // Fall back to simulator
         paymentUrl = `${appUrl}/pay?referenceId=${referenceId}&amount=${amount}`;
         razorpayPaymentLinkId = `plink_mock_${Math.random().toString(36).substr(2, 9)}`;
       }
     } else {
+      console.log('[RAZORPAY DIAGNOSTIC WARNING] Razorpay Client not initialized because credentials are missing.');
+      
       if (isProd) {
-        throw new Error('Unable to generate payment link. Please retry in a few moments.');
+        throw new Error('Razorpay Link Generation Failed: Razorpay Client is not configured. Missing RAZORPAY_KEY_ID or RAZORPAY_KEY_SECRET environment variables.');
       }
+      
+      console.log('[RAZORPAY DIAGNOSTIC INFO] Dev/Test mode active. Generating simulator link.');
       // Offline Simulation Mode
       paymentUrl = `${appUrl}/pay?referenceId=${referenceId}&amount=${amount}`;
       razorpayPaymentLinkId = `plink_mock_${Math.random().toString(36).substr(2, 9)}`;
