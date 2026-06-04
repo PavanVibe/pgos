@@ -82,6 +82,7 @@ model PG {
   tenantProfiles PGTenantProfile[]
   damageRecoveries DamageRecovery[]
   staff          Staff[]
+  leads          Lead[]
   cleaningChecklist CleaningChecklist?
   monthlyBusinessSnapshots MonthlyBusinessSnapshot[]
 
@@ -108,6 +109,7 @@ model Room {
   beds           Bed[]
   tenantProfiles PGTenantProfile[]
   damageRecoveries DamageRecovery[]
+  leads          Lead[]
 
   @@index([pgId])
   @@index([isActive])
@@ -537,4 +539,23 @@ model PaymentReceipt {
   @@index([tenantProfileId])
   @@index([invoiceId])
   @@index([recoveryId])
+}
+
+model Lead {
+  id               String    @id @default(uuid())
+  pgId             String
+  name             String
+  phone            String
+  source           String
+  interestedRoomId String?
+  expectedMoveIn   DateTime?
+  status           String    @default("NEW_LEAD") // stages: NEW_LEAD, CONTACTED, SITE_VISIT_SCHEDULED, NEGOTIATING, BOOKED, CHECKED_IN, LOST
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  pg               PG        @relation(fields: [pgId], references: [id])
+  interestedRoom   Room?     @relation(fields: [interestedRoomId], references: [id])
+
+  @@index([pgId])
+  @@index([status])
 }

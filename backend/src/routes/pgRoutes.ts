@@ -1,10 +1,14 @@
 import { Router } from 'express';
 import { 
   createPG, 
+  updatePG,
   getOrganizationPGs, 
   allocateBedController,
   getPGRooms,
   createRoom,
+  updateRoomController,
+  deleteRoomController,
+  updateBedController,
   getRoomHistory,
   payRent,
   payDeposit,
@@ -19,6 +23,8 @@ import {
   sendReminderManual,
   saveTenantNoteManual
 } from '../controllers/pgController';
+import { getUnifiedPayments } from '../controllers/paymentController';
+import { getLeads, createLead, updateLead, deleteLead } from '../controllers/leadController';
 import {
   getRecoveriesLedger,
   getDamageRecoveryDashboard,
@@ -58,12 +64,25 @@ router.get('/', getOrganizationPGs);
 
 // Specific PG operations (Requires canAccessPG)
 router.get('/:pgId/dashboard/summary', canAccessPG, getDashboardSummary);
+router.put('/:pgId', canAccessPG, updatePG);
 router.use('/:pgId/dashboard', dashboardRoutes);
 
 // PGRooms (Bed selector & Room History)
 router.get('/:pgId/rooms', canAccessPG, getPGRooms);
 router.post('/:pgId/rooms', canAccessPG, createRoom);
+router.put('/:pgId/rooms/:roomId', canAccessPG, updateRoomController);
+router.delete('/:pgId/rooms/:roomId', canAccessPG, deleteRoomController);
+router.put('/:pgId/beds/:bedId', canAccessPG, updateBedController);
 router.get('/:pgId/rooms/:roomId/history', canAccessPG, getRoomHistory);
+
+// Unified Payments Route
+router.get('/:pgId/payments', canAccessPG, getUnifiedPayments);
+
+// Leads Module
+router.get('/:pgId/leads', canAccessPG, getLeads);
+router.post('/:pgId/leads', canAccessPG, createLead);
+router.put('/:pgId/leads/:leadId', canAccessPG, updateLead);
+router.delete('/:pgId/leads/:leadId', canAccessPG, deleteLead);
 
 // Operations Mutations
 router.post('/:pgId/tenants/:tenantId/pay-rent', canAccessPG, payRent);

@@ -9,8 +9,11 @@ const router = (0, express_1.Router)();
 router.use(authMiddleware_1.requireAuth, authMiddleware_1.attachOrgContext, rbacMiddleware_1.canAccessOrganization);
 router.get('/search-by-phone', tenantController_1.searchByPhone);
 router.get('/profiles/:profileId', tenantController_1.getResidentProfile);
+router.get('/pgs/:pgId/residents', rbacMiddleware_1.canAccessPG, tenantController_1.getPGResidents);
 router.post('/pgs/:pgId/onboard', rbacMiddleware_1.canAccessPG, (0, rbacMiddleware_1.auditAction)('START_ONBOARDING', 'PGTenantProfile'), tenantController_1.onboard);
+router.put('/pgs/:pgId/tenants/:tenantId', rbacMiddleware_1.canAccessPG, tenantController_1.updateResidentProfile);
 router.post('/beds/:bedId/lock', tenantController_1.lockBedForOnboarding);
 router.post('/pgs/:pgId/tenants/:tenantId/vacate', rbacMiddleware_1.canAccessPG, (0, rbacMiddleware_1.auditAction)('VACATE_RESIDENT', 'PGTenantProfile'), tenantController_1.vacate);
+router.post('/pgs/:pgId/tenants/:tenantId/settle-moveout', rbacMiddleware_1.canAccessPG, tenantController_1.settleMoveout);
 exports.default = router;
 //# sourceMappingURL=tenantRoutes.js.map

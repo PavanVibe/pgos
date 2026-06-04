@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.saveTenantNoteManual = exports.sendReminderManual = exports.getOverdueResidentsManual = exports.scanOverdueManual = exports.generateInvoicesManual = exports.getRoomHistory = exports.getPGComplaint = exports.getPGComplaints = exports.resolveComplaint = exports.createComplaint = exports.payDeposit = exports.payRent = exports.getPGRooms = exports.allocateBedController = exports.createRoom = exports.getOrganizationPGs = exports.createPG = void 0;
+exports.saveTenantNoteManual = exports.sendReminderManual = exports.getOverdueResidentsManual = exports.scanOverdueManual = exports.generateInvoicesManual = exports.getRoomHistory = exports.getPGComplaint = exports.getPGComplaints = exports.resolveComplaint = exports.createComplaint = exports.refundDeposit = exports.payDeposit = exports.payRent = exports.getPGRooms = exports.allocateBedController = exports.updateBedController = exports.deleteRoomController = exports.updateRoomController = exports.createRoom = exports.getOrganizationPGs = exports.updatePG = exports.createPG = void 0;
 const client_1 = require("@prisma/client");
 const prisma_1 = __importDefault(require("../utils/prisma"));
 const bedService_1 = require("../services/bedService");
@@ -36,6 +36,38 @@ const createPG = async (req, res) => {
     }
 };
 exports.createPG = createPG;
+const updatePGSchema = zod_1.z.object({
+    name: zod_1.z.string().min(3).optional(),
+    city: zod_1.z.string().optional(),
+    address: zod_1.z.string().optional()
+});
+const updatePG = async (req, res) => {
+    try {
+        const pgId = req.pg?.id || req.params.pgId;
+        if (!pgId) {
+            return res.status(400).json({ error: 'PG ID context is required.' });
+        }
+        const { name, city, address } = updatePGSchema.parse(req.body);
+        const updateData = {
+            updatedBy: req.auth?.userId
+        };
+        if (name !== undefined)
+            updateData.name = name;
+        if (city !== undefined)
+            updateData.city = city;
+        if (address !== undefined)
+            updateData.address = address;
+        const pg = await prisma_1.default.pG.update({
+            where: { id: pgId },
+            data: updateData
+        });
+        res.status(200).json({ status: 'success', data: pg });
+    }
+    catch (error) {
+        res.status(400).json({ error: error.message || 'Invalid Request' });
+    }
+};
+exports.updatePG = updatePG;
 const getOrganizationPGs = async (req, res) => {
     try {
         const org = req.organization;
@@ -98,6 +130,212 @@ const createRoom = async (req, res) => {
     }
 };
 exports.createRoom = createRoom;
+const updateRoomController = async (req, res) => {
+    try {
+        const pgId = (req.pg?.id || req.params.pgId);
+        const roomId = req.params.roomId;
+        if (!pgId) {
+            return res.status(400).json({ error: 'PG ID context is required.' });
+        }
+        const { number, floor, monthlyRent, capacity, isActive } = req.body;
+        const result = await prisma_1.default.$transaction(async (tx) => {
+            // 1. Fetch room with current beds and active tenant profiles
+            const room = await tx.room.findFirst({
+                where: { id: roomId, pgId, isActive: true },
+                include: {
+                    beds: {
+                        where: { isActive: true },
+                        include: {
+                            tenantProfile: {
+                                where: { status: { in: ['ACTIVE', 'INCOMPLETE', 'NOTICE'] } }
+                            }
+                        }
+                    }
+                }
+            });
+            if (!room) {
+                throw new Error('Room not found.');
+            }
+            // Handle deactivation checks
+            if (isActive === false) {
+                const hasActiveOccupants = room.beds.some((b) => b.tenantProfile !== null);
+                if (hasActiveOccupants) {
+                    throw new Error('Cannot deactivate a room with active residents.');
+                }
+                // Deactivate Room and all of its beds
+                await tx.room.update({
+                    where: { id: roomId },
+                    data: { isActive: false }
+                });
+                await tx.bed.updateMany({
+                    where: { roomId },
+                    data: { isActive: false }
+                });
+                return { message: 'Room and all beds deactivated successfully.' };
+            }
+            const updateData = {};
+            if (number !== undefined)
+                updateData.number = number;
+            if (floor !== undefined)
+                updateData.floor = floor;
+            // Handle capacity changes
+            if (capacity !== undefined && capacity !== room.capacity) {
+                const currentBeds = room.beds;
+                if (capacity > room.capacity) {
+                    // Add beds
+                    const diff = capacity - room.capacity;
+                    const defaultRent = monthlyRent || (currentBeds[0]?.monthlyRent ?? 8500);
+                    // Generate bed names that don't conflict (e.g. B1, B2...)
+                    const existingBedNumbers = new Set(currentBeds.map((b) => b.bedNumber));
+                    const newBedsData = [];
+                    let currentIdx = 1;
+                    while (newBedsData.length < diff) {
+                        const bedLabel = `B${currentIdx}`;
+                        if (!existingBedNumbers.has(bedLabel)) {
+                            newBedsData.push({
+                                roomId,
+                                bedNumber: bedLabel,
+                                monthlyRent: defaultRent,
+                                isActive: true
+                            });
+                        }
+                        currentIdx++;
+                    }
+                    await tx.bed.createMany({ data: newBedsData });
+                    updateData.capacity = capacity;
+                }
+                else if (capacity < room.capacity) {
+                    // Remove beds
+                    const diff = room.capacity - capacity;
+                    const vacantBeds = currentBeds.filter((b) => b.tenantProfile === null);
+                    if (vacantBeds.length < diff) {
+                        throw new Error(`Cannot reduce capacity to ${capacity} sharing. Only ${vacantBeds.length} vacant beds are available, but need to remove ${diff}.`);
+                    }
+                    // Deactivate or delete the excess vacant beds
+                    const bedsToRemoveIds = vacantBeds.slice(0, diff).map((b) => b.id);
+                    await tx.bed.updateMany({
+                        where: { id: { in: bedsToRemoveIds } },
+                        data: { isActive: false, deletedAt: new Date() }
+                    });
+                    updateData.capacity = capacity;
+                }
+            }
+            // Handle rent updates on beds
+            if (monthlyRent !== undefined) {
+                await tx.bed.updateMany({
+                    where: { roomId },
+                    data: { monthlyRent: parseFloat(monthlyRent) }
+                });
+            }
+            // Update room number/floor
+            if (Object.keys(updateData).length > 0) {
+                await tx.room.update({
+                    where: { id: roomId },
+                    data: updateData
+                });
+            }
+            return tx.room.findUnique({
+                where: { id: roomId },
+                include: { beds: { where: { isActive: true } } }
+            });
+        });
+        res.status(200).json({ status: 'success', data: result });
+    }
+    catch (error) {
+        res.status(400).json({ error: error.message || 'Failed to update room.' });
+    }
+};
+exports.updateRoomController = updateRoomController;
+const deleteRoomController = async (req, res) => {
+    try {
+        const pgId = (req.pg?.id || req.params.pgId);
+        const roomId = req.params.roomId;
+        if (!pgId) {
+            return res.status(400).json({ error: 'PG ID context is required.' });
+        }
+        const room = await prisma_1.default.room.findFirst({
+            where: { id: roomId, pgId, isActive: true },
+            include: {
+                beds: {
+                    include: {
+                        tenantProfile: {
+                            where: { status: { in: ['ACTIVE', 'INCOMPLETE', 'NOTICE'] } }
+                        }
+                    }
+                },
+                tenantProfiles: {
+                    where: { isActive: true }
+                }
+            }
+        });
+        if (!room) {
+            return res.status(404).json({ error: 'Room not found.' });
+        }
+        const hasActiveOccupants = room.beds.some((b) => b.tenantProfile !== null);
+        if (hasActiveOccupants) {
+            return res.status(400).json({ error: 'Cannot delete a room with active residents.' });
+        }
+        // Check if the room has any tenant history
+        const hasHistory = room.tenantProfiles.length > 0;
+        if (hasHistory) {
+            // Soft delete room and beds
+            await prisma_1.default.$transaction([
+                prisma_1.default.room.update({
+                    where: { id: roomId },
+                    data: { isActive: false, deletedAt: new Date() }
+                }),
+                prisma_1.default.bed.updateMany({
+                    where: { roomId },
+                    data: { isActive: false, deletedAt: new Date() }
+                })
+            ]);
+        }
+        else {
+            // Hard delete beds and room
+            await prisma_1.default.$transaction([
+                prisma_1.default.bed.deleteMany({
+                    where: { roomId }
+                }),
+                prisma_1.default.room.delete({
+                    where: { id: roomId }
+                })
+            ]);
+        }
+        res.status(200).json({ status: 'success', message: 'Room deleted successfully.' });
+    }
+    catch (error) {
+        res.status(400).json({ error: error.message || 'Failed to delete room.' });
+    }
+};
+exports.deleteRoomController = deleteRoomController;
+const updateBedController = async (req, res) => {
+    try {
+        const pgId = (req.pg?.id || req.params.pgId);
+        const bedId = req.params.bedId;
+        const { bedNumber, monthlyRent } = req.body;
+        const bed = await prisma_1.default.bed.findFirst({
+            where: { id: bedId, isActive: true },
+            include: { room: true }
+        });
+        if (!bed || bed.room.pgId !== pgId) {
+            return res.status(404).json({ error: 'Bed not found in this PG context.' });
+        }
+        const updateData = {};
+        if (bedNumber !== undefined)
+            updateData.bedNumber = bedNumber;
+        if (monthlyRent !== undefined)
+            updateData.monthlyRent = parseFloat(monthlyRent);
+        const updatedBed = await prisma_1.default.bed.update({
+            where: { id: bedId },
+            data: updateData
+        });
+        res.status(200).json({ status: 'success', data: updatedBed });
+    }
+    catch (error) {
+        res.status(400).json({ error: error.message });
+    }
+};
+exports.updateBedController = updateBedController;
 const allocateBedController = async (req, res) => {
     try {
         const pgId = req.pg?.id || req.params.pgId;
@@ -184,8 +422,8 @@ const payRent = async (req, res) => {
             console.warn(`[Deprecation Warning] Deprecated payment payload key "method" detected from actor ${actorId}. Use "paymentMode" instead.`);
             paymentMode = req.body.method;
         }
-        if (!paymentMode || (paymentMode !== 'upi' && paymentMode !== 'cash')) {
-            return res.status(400).json({ error: 'Valid payment method (upi/cash) is required.' });
+        if (!paymentMode || (paymentMode !== 'upi' && paymentMode !== 'cash' && paymentMode !== 'bank_transfer' && paymentMode !== 'cheque')) {
+            return res.status(400).json({ error: 'Valid payment method (upi/cash/bank_transfer/cheque) is required.' });
         }
         const parsedAmount = amount !== undefined && amount !== null ? parseFloat(amount) : undefined;
         const updatedInvoice = await PayRentWorkflow_1.PayRentWorkflow.execute(pgId, tenantId, paymentMode, actorId, parsedAmount, invoiceId, referenceId);
@@ -207,8 +445,8 @@ const payDeposit = async (req, res) => {
         if (req.body.method && !req.body.paymentMode) {
             paymentMode = req.body.method;
         }
-        if (!paymentMode || (paymentMode !== 'upi' && paymentMode !== 'cash' && paymentMode !== 'bank_transfer')) {
-            return res.status(400).json({ error: 'Valid payment method (upi/cash/bank_transfer) is required.' });
+        if (!paymentMode || (paymentMode !== 'upi' && paymentMode !== 'cash' && paymentMode !== 'bank_transfer' && paymentMode !== 'cheque')) {
+            return res.status(400).json({ error: 'Valid payment method (upi/cash/bank_transfer/cheque) is required.' });
         }
         const parsedAmount = amount !== undefined && amount !== null ? parseFloat(amount) : undefined;
         const updatedInvoice = await PayDepositWorkflow_1.PayDepositWorkflow.execute(pgId, tenantId, paymentMode, actorId, parsedAmount, invoiceId, referenceId);
@@ -219,6 +457,93 @@ const payDeposit = async (req, res) => {
     }
 };
 exports.payDeposit = payDeposit;
+const refundDeposit = async (req, res) => {
+    try {
+        const pgId = req.pg?.id || req.params.pgId;
+        const { tenantId } = req.params;
+        const { refundAmount, paymentMode, refundDate, notes } = req.body;
+        const actorId = req.auth?.userId || 'system';
+        if (!paymentMode || (paymentMode !== 'upi' && paymentMode !== 'cash' && paymentMode !== 'bank_transfer')) {
+            return res.status(400).json({ error: 'Valid payment method (upi/cash/bank_transfer) is required.' });
+        }
+        if (refundAmount === undefined || refundAmount === null || parseFloat(refundAmount) < 0) {
+            return res.status(400).json({ error: 'Valid refund amount is required.' });
+        }
+        const parsedRefundAmount = parseFloat(refundAmount);
+        const result = await prisma_1.default.$transaction(async (tx) => {
+            // 1. Fetch tenant profile
+            const profile = await tx.pGTenantProfile.findUnique({
+                where: { id: tenantId },
+                include: {
+                    invoices: {
+                        where: {
+                            type: 'SECURITY_DEPOSIT',
+                            status: 'PAID',
+                            isActive: true
+                        }
+                    }
+                }
+            });
+            if (!profile) {
+                throw new Error('Resident stay profile not found.');
+            }
+            // Compute total collected deposit
+            const totalCollectedDeposit = profile.invoices.reduce((sum, inv) => sum + inv.amount, 0);
+            // Refund Eligibility: Process Refund button should ONLY be visible when stay status is PAST (HISTORICAL)
+            if (profile.status === 'ACTIVE' || profile.status === 'NOTICE') {
+                throw new Error('Deposit refunds can only be processed for historical (vacated) residents.');
+            }
+            if (parsedRefundAmount > totalCollectedDeposit) {
+                throw new Error(`Refund amount cannot exceed collected deposit of ₹${totalCollectedDeposit}.`);
+            }
+            const deductionAmount = Math.max(0, totalCollectedDeposit - parsedRefundAmount);
+            // Status mapping based on refundAmount and deduction
+            let newStatus = profile.securityDepositStatus;
+            if (parsedRefundAmount + deductionAmount >= totalCollectedDeposit) {
+                newStatus = 'REFUNDED';
+            }
+            else {
+                newStatus = 'PARTIALLY_REFUNDED';
+            }
+            // 2. Update profile
+            const updatedProfile = await tx.pGTenantProfile.update({
+                where: { id: tenantId },
+                data: {
+                    securityDepositStatus: newStatus,
+                    depositRefundedAmount: parsedRefundAmount,
+                    depositDeductionAmount: deductionAmount,
+                    depositRefundedAt: refundDate ? new Date(refundDate) : new Date(),
+                    depositRefundMode: paymentMode,
+                    depositRefundNotes: notes || null,
+                    updatedBy: actorId
+                }
+            });
+            // 3. Write Audit Log
+            await tx.auditLog.create({
+                data: {
+                    actorId,
+                    action: 'DEPOSIT_REFUNDED',
+                    entityType: 'PGTenantProfile',
+                    entityId: profile.id,
+                    metadata: {
+                        pgId,
+                        tenantId,
+                        refundAmount: parsedRefundAmount,
+                        deductionAmount,
+                        paymentMode,
+                        notes
+                    }
+                }
+            });
+            return updatedProfile;
+        });
+        res.status(200).json({ status: 'success', data: result });
+    }
+    catch (error) {
+        res.status(400).json({ error: error.message });
+    }
+};
+exports.refundDeposit = refundDeposit;
 /**
  * Creates a new complaint for a PG room/area.
  */
@@ -246,7 +571,8 @@ const resolveComplaint = async (req, res) => {
         const pgId = req.pg?.id || req.params.pgId;
         const { complaintId } = req.params;
         const actorId = req.auth?.userId || 'system';
-        const updatedComplaint = await ResolveComplaintWorkflow_1.ResolveComplaintWorkflow.execute(pgId, complaintId, actorId);
+        const { repairCost, responsibility, assignedTenantId, billUrl, resolvedImageUrl, resolutionNotes, deductionItems, recoveryMethodInput } = req.body;
+        const updatedComplaint = await ResolveComplaintWorkflow_1.ResolveComplaintWorkflow.execute(pgId, complaintId, actorId, repairCost ? parseFloat(repairCost) : undefined, responsibility, assignedTenantId, billUrl, resolvedImageUrl, resolutionNotes, deductionItems, recoveryMethodInput);
         res.status(200).json({ status: 'success', data: updatedComplaint });
     }
     catch (error) {

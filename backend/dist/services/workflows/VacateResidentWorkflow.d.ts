@@ -4,6 +4,7 @@ export declare class VacateResidentWorkflow {
      */
     static execute(pgId: string, tenantId: string, actorId: string): Promise<{
         id: string;
+        status: import(".prisma/client").$Enums.TenantStatus;
         createdBy: string | null;
         updatedBy: string | null;
         isActive: boolean;
@@ -12,18 +13,20 @@ export declare class VacateResidentWorkflow {
         updatedAt: Date;
         pgId: string;
         roomId: string;
+        bedId: string | null;
         monthlyRent: number;
         globalTenantId: string;
-        bedId: string | null;
         historicalRoomNumber: string | null;
         historicalBedNumber: string | null;
-        status: import(".prisma/client").$Enums.TenantStatus;
         securityDeposit: number;
         securityDepositStatus: string;
         depositCollectedAt: Date | null;
         depositRefundedAmount: number | null;
+        depositDeductionAmount: number | null;
         depositRefundedAt: Date | null;
         depositRefundMode: string | null;
+        depositRefundNotes: string | null;
+        settlementStatus: string;
         moveInDate: Date;
         moveOutDate: Date | null;
     }>;

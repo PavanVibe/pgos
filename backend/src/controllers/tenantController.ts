@@ -489,4 +489,103 @@ export const settleMoveout = async (req: Request, res: Response) => {
   }
 };
 
+const updateResidentSchema = z.object({
+  name: z.string().optional(),
+  phone: z.string().optional(),
+  email: z.string().email().optional().or(z.literal('')),
+});
+
+export const updateResidentProfile = async (req: Request, res: Response) => {
+  try {
+    const pgId = ((req as any).pg?.id || req.params.pgId) as string;
+    const tenantId = req.params.tenantId as string;
+    if (!pgId) {
+      return res.status(400).json({ error: 'PG ID context is required.' });
+    }
+
+    const { name, phone, email } = updateResidentSchema.parse(req.body);
+
+    const profile = await prisma.pGTenantProfile.findFirst({
+      where: { id: tenantId, pgId, isActive: true },
+      include: { globalTenant: true }
+    });
+
+    if (!profile) {
+      return res.status(404).json({ error: 'Resident stay profile not found.' });
+    }
+
+    // Update globalTenant and profile
+    const result = await prisma.$transaction(async (tx) => {
+      const tenantData: any = {};
+      if (name !== undefined) tenantData.name = name;
+      if (phone !== undefined) tenantData.phone = phone;
+      if (email !== undefined) tenantData.email = email || null;
+
+      await tx.globalTenant.update({
+        where: { id: profile.globalTenantId },
+        data: tenantData
+      });
+
+      return tx.pGTenantProfile.findUnique({
+        where: { id: tenantId },
+        include: { globalTenant: true }
+      });
+    });
+
+    res.status(200).json({ status: 'success', data: result });
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+/**
+ * Fetch all active resident profiles in a PG
+ */
+export const getPGResidents = async (req: Request, res: Response) => {
+  try {
+    const pgId = (req as any).pg?.id || req.params.pgId;
+    if (!pgId) {
+      return res.status(400).json({ error: 'PG ID context is required.' });
+    }
+
+    const { status } = req.query;
+
+    const profiles = await prisma.pGTenantProfile.findMany({
+      where: {
+        pgId: pgId as string,
+        isActive: true,
+        status: status ? (status as any) : undefined
+      },
+      include: {
+        globalTenant: {
+          select: {
+            name: true,
+            phone: true,
+            email: true
+          }
+        },
+        room: {
+          select: {
+            number: true,
+            floor: true
+          }
+        },
+        bed: {
+          select: {
+            bedNumber: true,
+            monthlyRent: true
+          }
+        }
+      },
+      orderBy: {
+        createdAt: 'desc'
+      }
+    });
+
+    res.status(200).json({ status: 'success', data: profiles });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'Failed to fetch PG residents.' });
+  }
+};
+
 

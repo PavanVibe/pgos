@@ -1,56 +1,174 @@
-# PGOS: Resident Onboarding Workflow Implementation
+# Implementation Plan — PGOS V2.1 Strategic Restructure
 
-The goal of this phase is to build the "operational heart" of PGOS: a lightning-fast, mobile-optimized Resident Onboarding Workflow.
+Restructure the existing PGOS application to prioritize resident-centric navigation, vacancy filling, automated rent collections, and transparent tenant-owner relationships.
+
+---
 
 ## User Review Required
 
 > [!IMPORTANT]
-> Please review the structural plan below for the Resident Onboarding system. If the steps, backend transaction logic, and UX flow align with your vision for Indian PG operators, approve this plan so I can begin generating the code.
-
-## 1. Backend: Atomic Onboarding API (Step 8)
-We will build `POST /api/tenants/onboard`.
-This endpoint will execute a massive, safe `prisma.$transaction`:
-1. **Validate**: Check if the `Bed` is vacant and `isActive`.
-2. **GlobalTenant**: Upsert based on Phone Number (to prevent duplicates).
-3. **PGTenantProfile**: Create active profile linked to the PG and Bed.
-4. **RentInvoice**: Automatically generate the first month's rent invoice (+ security deposit).
-5. **AuditLog**: Log the action.
-6. **EventBus**: Emit `TENANT_MOVED_IN` and `BED_ALLOCATED`.
-*If any step fails, the entire database transaction rolls back, leaving zero orphaned data.*
-
-## 2. Frontend: Zustand State Management
-We will create a multi-step `Zustand` store (`useOnboardingStore`) to hold the transient state of the onboarding wizard without forcing premature database saves.
-```typescript
-interface OnboardingState {
-  step: number;
-  pgId: string | null;
-  bedId: string | null;
-  residentDetails: { name: string, phone: string, emergencyContact: string, moveInDate: Date } | null;
-  kycDetails: { aadhaarUrl: string, photoUrl: string } | null;
-  rentConfig: { monthlyRent: number, deposit: number, dueDate: Date } | null;
-  // actions...
-}
-```
-
-## 3. Frontend: Step Components (Steps 1-7)
-We will generate a mobile-first wizard in `frontend/src/app/(dashboard)/onboarding/page.tsx`:
-- **Step 1: Bed Selector Grid**: Visually maps Rooms -> Beds. Green (Vacant), Red (Occupied). Designed with large tap targets.
-- **Step 2: Resident Details**: A minimal `react-hook-form` capturing Name, Phone, and Move-in Date.
-- **Step 3: KYC Uploader**: Connects to the Cloudinary signed URL service for fast uploads.
-- **Step 4: Rent Config**: Auto-fills from the Bed's default rent.
-- **Step 5: Review & Confirm**: One-click confirmation that triggers the backend transaction.
-
-## 4. Quick Add Resident Mode (Step 11)
-A secondary, ultra-fast mode inside `QuickActions.tsx` that bypasses KYC and Rent Config, requiring ONLY: Name, Phone, and Bed Selection. The backend will use defaults for the rest, allowing the PG Owner to complete the profile later.
-
-## 5. Dashboard Integration & Optimistic Updates
-Using React Query, upon successful onboarding, we will instantly invalidate the `dashboard-summary` and `occupancy-grid` cache keys, updating the UI metrics immediately without a hard page reload.
+> - **Lead Model Schema Migration (`schema.prisma`):**
+>   We will introduce a new `Lead` model to track prospective tenants, interested rooms, sources, expected move-in dates, and pipeline statuses (New Lead, Contacted, Site Visit Scheduled, Negotiating, Booked, Checked In, Lost).
+> - **Unified Sidebar Layout (`(dashboard)/layout.tsx`):**
+>   We will create a global client-side layout for all routes under the `(dashboard)` group. This renders a high-fidelity responsive sidebar layout containing navigation links: Dashboard, Leads, Residents, Rooms, Payments, Issues, Operations, Reports, Settings.
+> - **Public Tenant Portal (`/tenant`):**
+>   We will create an open, public tenant portal at `frontend/src/app/tenant/page.tsx` where residents can view rent invoices, deposit details, outstanding complaints, and a transparent itemized breakdown of move-out damage recoveries with notes/receipts to eliminate deposit disputes.
+> - **Dashboard Simplification V2:**
+>   We will simplify `/` (Dashboard) down to exactly three main modules:
+>   1. Section 1: Quick Actions (Onboard Resident, Raise Ticket, Vacate Resident).
+>   2. Section 2: Visual Room Grid & Occupancy Matrix.
+>   3. Section 3: Business Summary (Revenue, Expenses, Profit).
+> - **Universal Drawer System:**
+>   Clicking any entity (Resident, Room, Complaint, Payment, Damage Charge, Invoice, Lead, Staff Member) opens a dedicated side drawer containing comprehensive timeline, details, and context.
 
 ---
 
-### Execution Steps
-Upon your approval, I will:
-1. Build the Backend `tenantController` and `onboard` API.
-2. Setup the `Zustand` store and `react-query` hooks on the frontend.
-3. Build the UI components (`BedSelectorGrid`, Stepper, Forms).
-4. Wire the `QuickActions` to launch this workflow.
+## Open Questions
+
+> [!NOTE]
+> - **Lead to Bed Draft Generator Amenities:**
+>   When generating a marketing listing for a room, we will fetch standard PG location details and room properties (Monthly Rent, Capacity, Floor) and merge them with generic local amenities (High-speed Wi-Fi, Daily cleaning, Food option) to output ready-to-copy advertisements for WhatsApp, Facebook Marketplace, and real-estate directories.
+
+---
+
+## Proposed Changes
+
+```mermaid
+graph TD
+    A[Global Sidebar Navigation] --> B[Dashboard /]
+    A --> C[Leads /leads]
+    A --> D[Residents /residents]
+    A --> E[Rooms /rooms]
+    A --> F[Payments /payments]
+    A --> G[Issues /issues]
+    A --> H[Operations /operations]
+    A --> I[Reports /reports]
+    A --> J[Settings /settings/pgs]
+
+    K[Click Event] -->|Universal Triggers| L[Entity Drawer]
+    L -->|Lead/Room/Payment/Complaint/Resident/Staff| M[Details, Timelines & Actions]
+```
+
+### 1. Database Schema & API Controllers
+
+#### [MODIFY] [schema.prisma](file:///c:/Users/pavan/OneDrive/Desktop/PG_Startup/backend/prisma/schema.prisma)
+- Add the `Lead` model:
+  ```prisma
+  model Lead {
+    id               String       @id @default(uuid())
+    pgId             String
+    name             String
+    phone            String
+    source           String
+    interestedRoomId String?
+    expectedMoveIn   DateTime?
+    status           String       @default("NEW_LEAD")
+    createdAt        DateTime     @default(now())
+    updatedAt        DateTime     @updatedAt
+
+    pg               PG           @relation(fields: [pgId], references: [id])
+    interestedRoom   Room?        @relation(fields: [interestedRoomId], references: [id])
+
+    @@index([pgId])
+    @@index([status])
+  }
+  ```
+- Expose the `leads` relation in the `PG` and `Room` models.
+
+#### [NEW] [leadController.ts](file:///c:/Users/pavan/OneDrive/Desktop/PG_Startup/backend/src/controllers/leadController.ts)
+- Implement REST API endpoints:
+  - `GET /api/pgs/:pgId/leads` (fetch all leads, support filter by status).
+  - `POST /api/pgs/:pgId/leads` (create new lead).
+  - `PUT /api/pgs/:pgId/leads/:leadId` (update lead status/details).
+  - `DELETE /api/pgs/:pgId/leads/:leadId` (delete or mark lost).
+- Register routes in `pgRoutes.ts`.
+
+---
+
+### 2. UI Restructure & Global Sidebar Layout
+
+#### [NEW] [layout.tsx](file:///c:/Users/pavan/OneDrive/Desktop/PG_Startup/frontend/src/app/(dashboard)/layout.tsx)
+- Implement a responsive glassmorphic sidebar layout.
+- Include a global PG Selector dropdown that updates `useOrganizationStore`.
+- Set up links to Dashboard, Leads, Residents, Rooms, Payments, Issues, Operations, Reports, Settings.
+- Render hamburger icon and drawer overlays for mobile compatibility.
+
+---
+
+### 3. Leads Pipeline & Module
+
+#### [NEW] [leads/page.tsx](file:///c:/Users/pavan/OneDrive/Desktop/PG_Startup/frontend/src/app/(dashboard)/leads/page.tsx)
+- Create a visual pipeline board (New Lead, Contacted, Site Visit Scheduled, Negotiating, Booked, Checked In, Lost).
+- Display Cards with Name, Phone, Source, Expected Move-In, Interested Room.
+- Quick Actions on cards: Call, WhatsApp, Schedule Visit, Convert to Resident (opens Onboarding with details preloaded), Mark Lost.
+- Render a **Vacancy Widget** showing vacant bed counts and estimated lost revenue (Vacant Beds * Rent).
+
+---
+
+### 4. Room Management & Lead-to-Bed Draft Engine
+
+#### [NEW] [rooms/page.tsx](file:///c:/Users/pavan/OneDrive/Desktop/PG_Startup/frontend/src/app/(dashboard)/rooms/page.tsx)
+- Display room grid (e.g. 101, 102, 201) with capacity badges.
+- Click room to open details panel. Expose Actions: Edit Rent, Edit Capacity, Deactivate Room, Delete Empty Room.
+- Add **"Fill Vacant Beds"** button:
+  - Generates a listing draft: Professional Title, Description (e.g., "Premium 2-Sharing Room with AC near campus"), amenities list, pricing, and contact info.
+  - Generates sharing links for WhatsApp Ad, Facebook Marketplace, MagicBricks, Housing.com, Telegram.
+
+---
+
+### 5. Payments & WhatsApp Automation Redesign
+
+#### [NEW] [payments/page.tsx](file:///c:/Users/pavan/OneDrive/Desktop/PG_Startup/frontend/src/app/(dashboard)/payments/page.tsx)
+- Single payments screen with tabs: `UNPAID`, `PARTIAL`, `PAID`.
+- Integrate the new **WhatsApp Reminder flow**:
+  - Click Send Reminder -> Generates Payment Link (using `/pay` public endpoint) -> Generates QR code -> Renders WhatsApp template template inside a Preview message card -> Opens WhatsApp window on approval.
+
+---
+
+### 6. Public Tenant Portal
+
+#### [NEW] [tenant/page.tsx](file:///c:/Users/pavan/OneDrive/Desktop/PG_Startup/frontend/src/app/tenant/page.tsx)
+- Create a public, authentication-free route `/tenant?profileId=...` for residents.
+- Display current rent dues, deposit held, active complaints, notices, and payment receipts.
+- **Move-Out Settlement Section:** Transparent breakdown showing collected deposit, itemized damage recovery deductions (with timestamps, reasons, and bill image links), rent adjustments, and refund dues.
+
+---
+
+### 7. Dashboard V2 Simplification
+
+#### [MODIFY] [page.tsx](file:///c:/Users/pavan/OneDrive/Desktop/PG_Startup/frontend/src/app/(dashboard)/page.tsx)
+- Remove all collections cards, recoveries, damage audits, and analytics graphs.
+- Limit the layout to exactly:
+  1. **Quick Actions Toolbar:** Onboard Resident, Raise Ticket, Vacate Resident.
+  2. **Visual Occupancy Grid:** Room Matrix with vacant/occupied/locked indicators.
+  3. **Business Summary:** Monthly Revenue, Expenses, and Profit card.
+
+---
+
+### 8. Universal Clickable Object Drawers
+
+- Implement/refactor drawer drawers for all system objects:
+  - Clicking Resident -> opens Resident Profile Drawer.
+  - Clicking Room -> opens Room Details Drawer.
+  - Clicking Complaint -> opens Complaint Timeline Drawer.
+  - Clicking Payment/Invoice -> opens Invoice Details Drawer.
+  - Clicking Lead -> opens Lead Details Drawer.
+  - Clicking Staff -> opens Staff Details Drawer.
+
+---
+
+## Verification Plan
+
+### Automated Tests
+- Create migration:
+  `npx prisma migrate dev --name add_leads_model`
+- Verify backend build compiles.
+- Run tests:
+  - `npx ts-node src/test-razorpay-collection.ts`
+  - `npx ts-node src/test-moveout-settlement.ts`
+
+### Manual Verification
+1. Open `/leads` and drag-and-drop or select statuses to verify pipeline transitions.
+2. Click "Fill Vacant Beds" on a vacant room and check that the generated listing is copied or formatted cleanly.
+3. Open `/tenant?profileId=...` and verify that all invoice statuses and damage deductions are transparently detailed.
+4. Confirm V2 dashboard shows only the three permitted modules.

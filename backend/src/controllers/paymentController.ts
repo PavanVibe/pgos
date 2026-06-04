@@ -259,3 +259,138 @@ export const simulatePaymentLinkCheckout = async (req: Request, res: Response) =
     res.status(400).json({ error: error.message });
   }
 };
+
+/**
+ * Fetch and merge RentInvoices (Rent & Deposit) and DamageRecoveries for a PG
+ */
+export const getUnifiedPayments = async (req: Request, res: Response) => {
+  try {
+    const pgId = (req as any).pg?.id || req.params.pgId;
+    if (!pgId) {
+      return res.status(400).json({ error: 'PG ID is required.' });
+    }
+
+    // 1. Fetch Rent & Deposit Invoices
+    const rentInvoices = await prisma.rentInvoice.findMany({
+      where: {
+        tenantProfile: {
+          pgId: pgId,
+        },
+        isActive: true,
+      },
+      include: {
+        tenantProfile: {
+          include: {
+            globalTenant: true,
+            room: true,
+            bed: true,
+          },
+        },
+        paymentLinks: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+        },
+      },
+      orderBy: { dueDate: 'desc' },
+    });
+
+    // 2. Fetch Damage Recoveries
+    const damageRecoveries = await prisma.damageRecovery.findMany({
+      where: {
+        pgId: pgId,
+      },
+      include: {
+        tenantProfile: {
+          include: {
+            globalTenant: true,
+            room: true,
+            bed: true,
+          },
+        },
+        paymentLinks: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    // 3. Map Rent Invoices to Unified Format
+    const mappedInvoices = rentInvoices.map((inv) => {
+      let unifiedStatus = 'UNPAID';
+      if (inv.status === 'PAID') {
+        unifiedStatus = 'PAID';
+      } else if (inv.status === 'PARTIALLY_PAID') {
+        unifiedStatus = 'PARTIAL';
+      }
+
+      const activeLink = inv.paymentLinks[0] || null;
+
+      return {
+        id: inv.id,
+        type: inv.type, // "RENT" or "SECURITY_DEPOSIT"
+        amount: inv.amount,
+        paidAmount: inv.paidAmount,
+        outstandingAmount: Math.max(0, inv.amount - inv.paidAmount),
+        dueDate: inv.dueDate,
+        createdAt: inv.createdAt,
+        status: unifiedStatus,
+        originalStatus: inv.status,
+        residentName: inv.tenantProfile.globalTenant.name || 'Resident',
+        residentPhone: inv.tenantProfile.globalTenant.phone,
+        residentId: inv.tenantProfile.id,
+        roomNumber: inv.tenantProfile.room.number,
+        bedNumber: inv.tenantProfile.bed?.bedNumber || inv.tenantProfile.historicalBedNumber || '-',
+        activeLink: activeLink ? {
+          referenceId: activeLink.referenceId,
+          paymentUrl: activeLink.paymentUrl,
+          status: activeLink.status,
+          expiresAt: activeLink.expiresAt,
+        } : null,
+      };
+    });
+
+    // 4. Map Damage Recoveries to Unified Format
+    const mappedRecoveries = damageRecoveries.map((rec) => {
+      let unifiedStatus = 'UNPAID';
+      if (rec.status === 'FULLY_RECOVERED' || rec.status === 'WAIVED') {
+        unifiedStatus = 'PAID';
+      } else if (rec.status === 'PARTIALLY_RECOVERED') {
+        unifiedStatus = 'PARTIAL';
+      }
+
+      const activeLink = rec.paymentLinks[0] || null;
+
+      return {
+        id: rec.id,
+        type: 'DAMAGE',
+        amount: rec.amount,
+        paidAmount: rec.recoveredAmount || rec.amountReceived || 0,
+        outstandingAmount: Math.max(0, rec.outstandingAmount),
+        dueDate: rec.createdAt,
+        createdAt: rec.createdAt,
+        status: unifiedStatus,
+        originalStatus: rec.status,
+        residentName: rec.tenantProfile.globalTenant.name || 'Resident',
+        residentPhone: rec.tenantProfile.globalTenant.phone,
+        residentId: rec.tenantProfile.id,
+        roomNumber: rec.tenantProfile.room.number,
+        bedNumber: rec.tenantProfile.bed?.bedNumber || rec.tenantProfile.historicalBedNumber || '-',
+        activeLink: activeLink ? {
+          referenceId: activeLink.referenceId,
+          paymentUrl: activeLink.paymentUrl,
+          status: activeLink.status,
+          expiresAt: activeLink.expiresAt,
+        } : null,
+      };
+    });
+
+    const allPayments = [...mappedInvoices, ...mappedRecoveries].sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+
+    res.status(200).json({ status: 'success', data: allPayments });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'Failed to fetch payments.' });
+  }
+};

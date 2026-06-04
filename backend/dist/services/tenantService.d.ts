@@ -1,12 +1,12 @@
 export declare const searchTenantByPhone: (phone: string) => Promise<{
-    id: string;
     name: string | null;
+    id: string;
     profiles: {
+        status: import(".prisma/client").$Enums.TenantStatus;
         pg: {
             name: string;
         };
         pgId: string;
-        status: import(".prisma/client").$Enums.TenantStatus;
         moveOutDate: Date | null;
     }[];
     email: string | null;

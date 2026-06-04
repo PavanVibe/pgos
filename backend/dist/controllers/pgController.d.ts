@@ -1,7 +1,11 @@
 import { Request, Response } from 'express';
 export declare const createPG: (req: Request, res: Response) => Promise<void>;
+export declare const updatePG: (req: Request, res: Response) => Promise<Response<any, Record<string, any>> | undefined>;
 export declare const getOrganizationPGs: (req: Request, res: Response) => Promise<void>;
 export declare const createRoom: (req: Request, res: Response) => Promise<Response<any, Record<string, any>> | undefined>;
+export declare const updateRoomController: (req: Request, res: Response) => Promise<Response<any, Record<string, any>> | undefined>;
+export declare const deleteRoomController: (req: Request, res: Response) => Promise<Response<any, Record<string, any>> | undefined>;
+export declare const updateBedController: (req: Request, res: Response) => Promise<Response<any, Record<string, any>> | undefined>;
 export declare const allocateBedController: (req: Request, res: Response) => Promise<void>;
 /**
  * Fetches all rooms and beds in the PG, including active occupants, to power the onboarding bed grid.
@@ -9,6 +13,7 @@ export declare const allocateBedController: (req: Request, res: Response) => Pro
 export declare const getPGRooms: (req: Request, res: Response) => Promise<void>;
 export declare const payRent: (req: Request, res: Response) => Promise<Response<any, Record<string, any>> | undefined>;
 export declare const payDeposit: (req: Request, res: Response) => Promise<Response<any, Record<string, any>> | undefined>;
+export declare const refundDeposit: (req: Request, res: Response) => Promise<Response<any, Record<string, any>> | undefined>;
 /**
  * Creates a new complaint for a PG room/area.
  */

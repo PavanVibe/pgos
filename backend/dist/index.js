@@ -19,8 +19,10 @@ app.get('/health', (req, res) => {
 });
 const pgRoutes_1 = __importDefault(require("./routes/pgRoutes"));
 const tenantRoutes_1 = __importDefault(require("./routes/tenantRoutes"));
+const paymentRoutes_1 = __importDefault(require("./routes/paymentRoutes"));
 app.use('/api/pgs', pgRoutes_1.default);
 app.use('/api/tenants', tenantRoutes_1.default);
+app.use('/api/payments', paymentRoutes_1.default);
 const CronScheduler_1 = require("./services/automation/CronScheduler");
 app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);

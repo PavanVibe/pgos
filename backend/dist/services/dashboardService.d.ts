@@ -16,6 +16,13 @@ export declare const getPGDashboardSummary: (pgId: string, orgId: string) => Pro
     collectedLastMonth: number;
     collectedDeposits: number;
     pendingDeposits: number;
+    refundedDeposits: number;
     refundLiability: number;
+    pendingRefundResidents: number;
+    pendingRecoveriesCount: number;
+    totalPendingRecoveryAmount: number;
+    totalOutstanding: number;
+    todaysPaymentsAmount: number;
+    todaysPaymentsCount: number;
 }>;
 //# sourceMappingURL=dashboardService.d.ts.map

@@ -120,44 +120,97 @@ const getMonthlyCollectionLedger = async (req, res) => {
         const startOfMonth = new Date(year, monthIndex, 1);
         const endOfMonth = new Date(year, monthIndex + 1, 0, 23, 59, 59, 999);
         const { type } = req.query;
-        const invoiceWhere = {
-            tenantProfile: { pgId },
-            dueDate: {
-                gte: startOfMonth,
-                lte: endOfMonth,
-            },
-            isActive: true,
-        };
-        if (type === 'RENT' || type === 'SECURITY_DEPOSIT') {
-            invoiceWhere.type = type;
-        }
-        // Fetch all invoices due in this calendar month
-        const invoices = await prisma_1.default.rentInvoice.findMany({
-            where: invoiceWhere,
-            include: {
-                tenantProfile: {
-                    include: {
-                        globalTenant: {
-                            select: { name: true },
-                        },
-                        room: {
-                            select: { number: true },
-                        },
-                        bed: {
-                            select: { bedNumber: true },
+        const typeStr = (type || '').toUpperCase();
+        let invoices = [];
+        if (typeStr === 'RENT' || typeStr === 'SECURITY_DEPOSIT' || !typeStr || typeStr === 'ALL') {
+            const invoiceWhere = {
+                tenantProfile: { pgId },
+                dueDate: {
+                    gte: startOfMonth,
+                    lte: endOfMonth,
+                },
+                isActive: true,
+            };
+            if (typeStr === 'RENT' || typeStr === 'SECURITY_DEPOSIT') {
+                invoiceWhere.type = typeStr;
+            }
+            invoices = await prisma_1.default.rentInvoice.findMany({
+                where: invoiceWhere,
+                include: {
+                    tenantProfile: {
+                        include: {
+                            globalTenant: {
+                                select: { name: true, phone: true, email: true },
+                            },
+                            room: {
+                                select: { number: true },
+                            },
+                            bed: {
+                                select: { bedNumber: true },
+                            },
                         },
                     },
                 },
-            },
-            orderBy: {
-                dueDate: 'desc',
-            },
+                orderBy: {
+                    dueDate: 'desc',
+                },
+            });
+        }
+        let recoveries = [];
+        if (typeStr === 'DAMAGE_RECOVERY' || !typeStr || typeStr === 'ALL') {
+            recoveries = await prisma_1.default.damageRecovery.findMany({
+                where: {
+                    tenantProfile: { pgId },
+                    createdAt: {
+                        gte: startOfMonth,
+                        lte: endOfMonth,
+                    },
+                },
+                include: {
+                    tenantProfile: {
+                        include: {
+                            globalTenant: {
+                                select: { name: true, phone: true, email: true },
+                            },
+                            room: {
+                                select: { number: true },
+                            },
+                            bed: {
+                                select: { bedNumber: true },
+                            },
+                        },
+                    },
+                },
+                orderBy: {
+                    createdAt: 'desc',
+                },
+            });
+        }
+        const tenantIds = [
+            ...invoices.map((inv) => inv.pgTenantId),
+            ...recoveries.map((rec) => rec.tenantId)
+        ].filter(Boolean);
+        const depositInvoices = await prisma_1.default.rentInvoice.findMany({
+            where: {
+                pgTenantId: { in: tenantIds },
+                type: 'SECURITY_DEPOSIT',
+                status: 'PAID',
+                isActive: true
+            }
         });
-        const ledger = invoices.map((inv) => {
+        const invoiceEntries = invoices.map((inv) => {
             const profile = inv.tenantProfile;
+            const tenantInvoices = depositInvoices.filter(d => d.pgTenantId === profile.id);
+            const collectedDeposit = tenantInvoices.reduce((sum, d) => sum + d.amount, 0);
+            const totalDeductions = profile?.depositDeductionAmount || 0;
+            const refundedAmount = profile?.depositRefundedAmount || 0;
+            const refundableDeposit = Math.max(0, collectedDeposit - refundedAmount - totalDeductions);
             return {
                 id: inv.id,
+                tenantProfileId: profile.id,
                 residentName: profile.globalTenant.name || 'Unknown',
+                residentPhone: profile.globalTenant.phone,
+                residentEmail: profile.globalTenant.email || null,
                 roomNumber: profile.room?.number || profile.historicalRoomNumber || '-',
                 bedNumber: profile.bed?.bedNumber || profile.historicalBedNumber || '-',
                 amountPaid: inv.status === 'PAID' ? inv.amount : 0,
@@ -166,9 +219,55 @@ const getMonthlyCollectionLedger = async (req, res) => {
                 paymentDate: inv.paidAt || null,
                 paymentMode: inv.paymentMode || null,
                 referenceId: inv.referenceId || inv.id,
-                status: inv.status,
+                status: inv.status === 'PAID' ? 'COLLECTED' : inv.status === 'PAST_DUE' ? 'OVERDUE' : 'PENDING',
                 type: inv.type,
+                refundableDeposit,
             };
+        });
+        const recoveryEntries = recoveries.map((rec) => {
+            const profile = rec.tenantProfile;
+            const tenantInvoices = depositInvoices.filter(d => d.pgTenantId === profile.id);
+            const collectedDeposit = tenantInvoices.reduce((sum, d) => sum + d.amount, 0);
+            const totalDeductions = profile?.depositDeductionAmount || 0;
+            const refundedAmount = profile?.depositRefundedAmount || 0;
+            const refundableDeposit = Math.max(0, collectedDeposit - refundedAmount - totalDeductions);
+            let mappedStatus = rec.status;
+            if (rec.status === 'FULLY_RECOVERED') {
+                mappedStatus = 'COLLECTED';
+            }
+            else if (rec.status === 'PARTIALLY_RECOVERED') {
+                mappedStatus = 'PARTIALLY_PAID';
+            }
+            else if (rec.status === 'PENDING') {
+                mappedStatus = 'PENDING';
+            }
+            else if (rec.status === 'WAIVED') {
+                mappedStatus = 'WAIVED';
+            }
+            else if (rec.status === 'DISPUTED') {
+                mappedStatus = 'DISPUTED';
+            }
+            return {
+                id: rec.id,
+                tenantProfileId: profile.id,
+                residentName: profile.globalTenant.name || 'Unknown',
+                residentPhone: profile.globalTenant.phone,
+                residentEmail: profile.globalTenant.email || null,
+                roomNumber: profile.room?.number || profile.historicalRoomNumber || '-',
+                bedNumber: profile.bed?.bedNumber || profile.historicalBedNumber || '-',
+                amountPaid: rec.recoveredAmount || 0,
+                dueAmount: rec.outstandingAmount || 0,
+                dueDate: rec.createdAt,
+                paymentDate: rec.collectedDate || null,
+                paymentMode: rec.recoveryMethod || null,
+                referenceId: rec.referenceNumber || rec.id,
+                status: mappedStatus,
+                type: 'DAMAGE_RECOVERY',
+                refundableDeposit,
+            };
+        });
+        const ledger = [...invoiceEntries, ...recoveryEntries].sort((a, b) => {
+            return new Date(b.dueDate).getTime() - new Date(a.dueDate).getTime();
         });
         res.status(200).json({ status: 'success', data: ledger });
     }
@@ -250,6 +349,8 @@ const getDepositLedger = async (req, res) => {
         }
         const ledger = consolidatedProfiles.map((profile) => {
             const depositInvoice = profile.invoices.find((inv) => inv.type === 'SECURITY_DEPOSIT' && inv.status !== 'PAID') || profile.invoices.find((inv) => inv.type === 'SECURITY_DEPOSIT');
+            const paidDepositInvoices = profile.invoices.filter((inv) => inv.type === 'SECURITY_DEPOSIT' && inv.status === 'PAID');
+            const collectedAmount = paidDepositInvoices.reduce((sum, inv) => sum + inv.amount, 0);
             return {
                 id: profile.id,
                 residentName: profile.globalTenant.name || 'Unknown',
@@ -257,13 +358,18 @@ const getDepositLedger = async (req, res) => {
                 roomNumber: profile.room?.number || profile.historicalRoomNumber || '-',
                 bedNumber: profile.bed?.bedNumber || profile.historicalBedNumber || '-',
                 depositAmount: profile.securityDeposit,
-                status: profile.securityDeposit === 0 ? 'NO_DEPOSIT_REQUIRED' : profile.securityDepositStatus, // COLLECTED / PENDING / PARTIALLY_PAID / NO_DEPOSIT_REQUIRED
+                status: profile.securityDeposit === 0 ? 'NO_DEPOSIT_REQUIRED' : profile.securityDepositStatus, // COLLECTED / PENDING / PARTIALLY_PAID / NO_DEPOSIT_REQUIRED / PARTIALLY_REFUNDED / REFUNDED
                 collectedDate: profile.depositCollectedAt || null,
-                paymentMode: depositInvoice?.status === 'PAID' ? depositInvoice?.paymentMode : null,
-                refundStatus: profile.depositRefundedAt ? 'REFUNDED' : 'NOT_REFUNDED',
-                refundedAmount: profile.depositRefundedAmount || null,
+                paymentMode: paidDepositInvoices.length > 0 ? paidDepositInvoices[0]?.paymentMode : null,
+                collectedAmount,
+                deductionAmount: profile.depositDeductionAmount || 0,
+                refundedAmount: profile.depositRefundedAmount || 0,
+                refundStatus: profile.securityDepositStatus === 'REFUNDED'
+                    ? 'REFUNDED'
+                    : (profile.securityDepositStatus === 'PARTIALLY_REFUNDED' ? 'PARTIALLY_REFUNDED' : 'NOT_REFUNDED'),
                 refundedAt: profile.depositRefundedAt || null,
                 refundMode: profile.depositRefundMode || null,
+                refundNotes: profile.depositRefundNotes || null,
                 tenantStatus: profile.status === 'PAST' ? 'PAST' : (profile.status === 'NOTICE' ? 'NOTICE' : 'ACTIVE'), // Normalize active/incomplete stays
                 invoiceId: (depositInvoice && depositInvoice.status !== 'PAID') ? depositInvoice.id : null,
                 invoiceDueDate: depositInvoice?.dueDate || null,

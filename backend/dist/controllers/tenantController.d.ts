@@ -4,4 +4,10 @@ export declare const onboard: (req: Request, res: Response) => Promise<Response<
 export declare const lockBedForOnboarding: (req: Request, res: Response) => Promise<Response<any, Record<string, any>> | undefined>;
 export declare const vacate: (req: Request, res: Response) => Promise<void>;
 export declare const getResidentProfile: (req: Request, res: Response) => Promise<Response<any, Record<string, any>> | undefined>;
+export declare const settleMoveout: (req: Request, res: Response) => Promise<Response<any, Record<string, any>> | undefined>;
+export declare const updateResidentProfile: (req: Request, res: Response) => Promise<Response<any, Record<string, any>> | undefined>;
+/**
+ * Fetch all active resident profiles in a PG
+ */
+export declare const getPGResidents: (req: Request, res: Response) => Promise<Response<any, Record<string, any>> | undefined>;
 //# sourceMappingURL=tenantController.d.ts.map

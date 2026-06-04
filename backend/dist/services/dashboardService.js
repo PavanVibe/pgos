@@ -15,8 +15,10 @@ const getPGDashboardSummary = async (pgId, orgId) => {
     if (!pg) {
         throw new Error('PG not found or access denied.');
     }
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
     // Execute aggregations in parallel
-    const [totalBeds, occupiedBeds, pendingInvoices, unresolvedComplaints, highPriorityComplaints, expenses, overdueInvoicesCount, unpaidInvoicesCount, overdueInvoicesSum, collectedDepositsSum, pendingDepositsSum, refundLiabilitySum] = await Promise.all([
+    const [totalBeds, occupiedBeds, pendingInvoices, unresolvedComplaints, highPriorityComplaints, expenses, overdueInvoicesCount, unpaidInvoicesCount, overdueInvoicesSum, collectedDepositsSum, pendingDepositsSum, refundLiabilitySum, pendingRefundResidentsCount, pendingRecoveriesCount, totalPendingRecoveryAmountData, todaysPayments] = await Promise.all([
         // Total Beds (Soft delete filter applies automatically via Prisma Extension)
         prisma_1.default.bed.count({
             where: { room: { pgId } }
@@ -105,13 +107,51 @@ const getPGDashboardSummary = async (pgId, orgId) => {
             },
             _sum: { amount: true }
         }),
-        // Refund Liability (Refunded Deposits)
+        // Refund Liability (Refunded Deposits & Damage Deductions)
         prisma_1.default.pGTenantProfile.aggregate({
             where: {
                 pgId,
                 isActive: true
             },
-            _sum: { depositRefundedAmount: true }
+            _sum: {
+                depositRefundedAmount: true,
+                depositDeductionAmount: true
+            }
+        }),
+        // Pending Refund Residents (HISTORICAL profiles awaiting refund)
+        prisma_1.default.pGTenantProfile.count({
+            where: {
+                pgId,
+                status: 'PAST',
+                securityDepositStatus: { in: ['COLLECTED', 'PARTIALLY_REFUNDED'] },
+                isActive: true
+            }
+        }),
+        // Pending Damage Recoveries Count (unpaid/not waived)
+        prisma_1.default.damageRecovery.count({
+            where: {
+                pgId,
+                status: { in: ['PENDING', 'PARTIALLY_RECOVERED', 'DISPUTED'] }
+            }
+        }),
+        // Total Pending Damage Recovery Amount
+        prisma_1.default.damageRecovery.aggregate({
+            where: {
+                pgId,
+                status: { in: ['PENDING', 'PARTIALLY_RECOVERED', 'DISPUTED'] }
+            },
+            _sum: {
+                outstandingAmount: true
+            }
+        }),
+        // Today's Payments (collected today)
+        prisma_1.default.paymentReceipt.aggregate({
+            where: {
+                tenantProfile: { pgId },
+                paymentDate: { gte: startOfToday }
+            },
+            _sum: { amount: true },
+            _count: { id: true }
         })
     ]);
     console.log(`[getPGDashboardSummary] pgId: ${pgId}, pendingRent: ${pendingInvoices._sum.amount || 0}, unpaidInvoicesCount: ${unpaidInvoicesCount}, overdueRent: ${overdueInvoicesSum._sum.amount || 0}, overdueCount: ${overdueInvoicesCount}`);
@@ -170,11 +210,14 @@ const getPGDashboardSummary = async (pgId, orgId) => {
         _sum: { amount: true }
     });
     const collectedLastMonth = lastMonthPaidInvoices._sum.amount || 0;
+    const rentDueVal = pendingInvoices._sum.amount || 0;
+    const damageChargesVal = totalPendingRecoveryAmountData._sum.outstandingAmount || 0;
+    const depositDueVal = pendingDepositsSum._sum.amount || 0;
     return {
         totalBeds,
         occupiedBeds,
         vacantBeds: totalBeds - occupiedBeds,
-        pendingRent: pendingInvoices._sum.amount || 0,
+        pendingRent: rentDueVal,
         unpaidInvoicesCount,
         overdueRent: overdueInvoicesSum._sum.amount || 0,
         overdueCount: overdueInvoicesCount,
@@ -187,8 +230,15 @@ const getPGDashboardSummary = async (pgId, orgId) => {
         payingResidentsCount,
         collectedLastMonth,
         collectedDeposits: collectedDepositsSum._sum.amount || 0,
-        pendingDeposits: pendingDepositsSum._sum.amount || 0,
-        refundLiability: Math.max(0, (collectedDepositsSum._sum.amount || 0) - (refundLiabilitySum._sum.depositRefundedAmount || 0))
+        pendingDeposits: depositDueVal,
+        refundedDeposits: refundLiabilitySum._sum.depositRefundedAmount || 0,
+        refundLiability: Math.max(0, (collectedDepositsSum._sum.amount || 0) - (refundLiabilitySum._sum.depositRefundedAmount || 0) - (refundLiabilitySum._sum.depositDeductionAmount || 0)),
+        pendingRefundResidents: pendingRefundResidentsCount,
+        pendingRecoveriesCount,
+        totalPendingRecoveryAmount: damageChargesVal,
+        totalOutstanding: rentDueVal + damageChargesVal + depositDueVal,
+        todaysPaymentsAmount: todaysPayments._sum.amount || 0,
+        todaysPaymentsCount: todaysPayments._count.id || 0
     };
 };
 exports.getPGDashboardSummary = getPGDashboardSummary;
