@@ -88,6 +88,9 @@ export default function DashboardPage() {
         <div>
           <h1 className="text-4xl font-extrabold tracking-tight">PGOS Dashboard</h1>
           <p className="text-zinc-400 mt-1">Your resident-centric operational dashboard.</p>
+          <div className="text-[10px] text-zinc-650 font-mono mt-1.5 uppercase tracking-wider">
+            API: {process.env.NEXT_PUBLIC_API_URL || 'Fallback (Production)'} | Active PG: {activePgId || 'None'}
+          </div>
         </div>
         <div className="flex items-center gap-2 print:hidden">
           {availablePgs.length > 0 && (

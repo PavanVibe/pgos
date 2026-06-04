@@ -31,6 +31,8 @@ export async function fetchApi(endpoint: string, options: RequestInit = {}) {
     headers.set('x-org-id', orgId);
   }
 
+  console.log(`[fetchApi] Fetching: ${API_URL}${endpoint} with x-org-id: ${orgId}`);
+
   const response = await fetch(`${API_URL}${endpoint}`, {
     ...options,
     headers,

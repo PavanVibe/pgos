@@ -12,7 +12,19 @@ const prisma = new PrismaClient({ adapter });
 async function main() {
   console.log('Starting DB Seed...');
 
-  // Clear existing data
+  // Clear existing data in correct dependency order
+  await prisma.damageRecoveryItem.deleteMany();
+  await prisma.recoveryTransaction.deleteMany();
+  await prisma.paymentLink.deleteMany();
+  await prisma.paymentReceipt.deleteMany();
+  await prisma.damageRecovery.deleteMany();
+  await prisma.depositLedgerTransaction.deleteMany();
+  await prisma.staffSalaryPayment.deleteMany();
+  if (prisma.cleaningChecklist) await prisma.cleaningChecklist.deleteMany();
+  await prisma.monthlyBusinessSnapshot.deleteMany();
+  await prisma.lead.deleteMany();
+  await prisma.eventLog.deleteMany();
+  await prisma.auditLog.deleteMany();
   await prisma.complaint.deleteMany();
   await prisma.rentInvoice.deleteMany();
   await prisma.pGTenantProfile.deleteMany();
