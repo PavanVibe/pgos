@@ -111,7 +111,8 @@ const prisma = basePrisma.$extends({
           model !== 'CleaningChecklist' &&
           model !== 'MonthlyBusinessSnapshot' &&
           model !== 'PaymentLink' &&
-          model !== 'PaymentReceipt'
+          model !== 'PaymentReceipt' &&
+          model !== 'Lead'
         ) {
           args.where = { isActive: true, ...args.where };
         }
@@ -130,7 +131,8 @@ const prisma = basePrisma.$extends({
           model !== 'CleaningChecklist' &&
           model !== 'MonthlyBusinessSnapshot' &&
           model !== 'PaymentLink' &&
-          model !== 'PaymentReceipt'
+          model !== 'PaymentReceipt' &&
+          model !== 'Lead'
         ) {
           args.where = { isActive: true, ...args.where };
         }
@@ -149,7 +151,8 @@ const prisma = basePrisma.$extends({
           model !== 'CleaningChecklist' &&
           model !== 'MonthlyBusinessSnapshot' &&
           model !== 'PaymentLink' &&
-          model !== 'PaymentReceipt'
+          model !== 'PaymentReceipt' &&
+          model !== 'Lead'
         ) {
           args.where = { isActive: true, ...args.where };
         }
